@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "cd ../.. && bun install && cd apps/server && bun run build",
+    "watchPatterns": ["apps/server/**"]
+  },
+  "deploy": {
+    "startCommand": "cd apps/server && bun run start",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
