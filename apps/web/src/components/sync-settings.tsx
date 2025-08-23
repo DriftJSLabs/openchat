@@ -9,13 +9,13 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Download, Upload, Wifi, WifiOff, Sync, AlertCircle } from 'lucide-react';
+import { Download, Upload, Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 
-interface SyncSettingsProps {
+interface RefreshCwSettingsProps {
   userId: string;
 }
 
-export function SyncSettings({ userId }: SyncSettingsProps) {
+export function RefreshCwSettings({ userId }: RefreshCwSettingsProps) {
   const { config, isLoading, updateConfig } = useSyncConfig(userId);
   const { syncStatus, triggerSync, setSyncMode } = useLocalDatabase({ userId });
   const [isSaving, setIsSaving] = useState(false);
@@ -32,10 +32,10 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
     }
   };
 
-  const handleAutoSyncToggle = async (autoSync: boolean) => {
+  const handleAutoRefreshCwToggle = async (autoRefreshCw: boolean) => {
     setIsSaving(true);
     try {
-      await updateConfig({ autoSync });
+      await updateConfig({ autoRefreshCw });
     } catch (error) {
       console.error('Failed to update auto sync:', error);
     } finally {
@@ -70,17 +70,17 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
 
   const getStatusIcon = () => {
     if (syncStatus.error) return <AlertCircle className="h-4 w-4" />;
-    if (syncStatus.syncing) return <Sync className="h-4 w-4 animate-spin" />;
+    if (syncStatus.syncing) return <RefreshCw className="h-4 w-4 animate-spin" />;
     if (!syncStatus.isOnline) return <WifiOff className="h-4 w-4" />;
     return <Wifi className="h-4 w-4" />;
   };
 
   const getStatusText = () => {
     if (syncStatus.error) return `Error: ${syncStatus.error}`;
-    if (syncStatus.syncing) return 'Syncing...';
+    if (syncStatus.syncing) return 'RefreshCwing...';
     if (!syncStatus.isOnline) return 'Offline';
-    if (syncStatus.lastSync) {
-      return `Last sync: ${syncStatus.lastSync.toLocaleTimeString()}`;
+    if (syncStatus.lastRefreshCw) {
+      return `Last sync: ${syncStatus.lastRefreshCw.toLocaleTimeString()}`;
     }
     return 'Ready to sync';
   };
@@ -89,7 +89,7 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Sync Settings</CardTitle>
+          <CardTitle>RefreshCw Settings</CardTitle>
           <CardDescription>Loading sync configuration...</CardDescription>
         </CardHeader>
       </Card>
@@ -101,8 +101,8 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Sync className="h-5 w-5" />
-            Sync Status
+            <RefreshCw className="h-5 w-5" />
+            RefreshCw Status
           </CardTitle>
           <CardDescription>
             Current synchronization status and controls
@@ -121,8 +121,8 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
               disabled={syncStatus.syncing || !syncStatus.isOnline}
               size="sm"
             >
-              <Sync className="h-4 w-4 mr-2" />
-              Sync Now
+              <RefreshCw className="h-4 w-4 mr-2" />
+              RefreshCw Now
             </Button>
           </div>
 
@@ -136,7 +136,7 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sync Mode</CardTitle>
+          <CardTitle>RefreshCw Mode</CardTitle>
           <CardDescription>
             Choose how your data is stored and synchronized
           </CardDescription>
@@ -183,7 +183,7 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
       {config?.mode === 'hybrid' && (
         <Card>
           <CardHeader>
-            <CardTitle>Auto Sync Settings</CardTitle>
+            <CardTitle>Auto RefreshCw Settings</CardTitle>
             <CardDescription>
               Configure automatic synchronization behavior
             </CardDescription>
@@ -192,21 +192,21 @@ export function SyncSettings({ userId }: SyncSettingsProps) {
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="auto-sync"
-                checked={config?.autoSync || false}
-                onCheckedChange={handleAutoSyncToggle}
+                checked={config?.autoRefreshCw || false}
+                onCheckedChange={handleAutoRefreshCwToggle}
                 disabled={isSaving}
               />
               <Label htmlFor="auto-sync" className="flex-1">
-                <div className="font-medium">Enable Auto Sync</div>
+                <div className="font-medium">Enable Auto RefreshCw</div>
                 <div className="text-sm text-muted-foreground">
                   Automatically sync changes in the background
                 </div>
               </Label>
             </div>
 
-            {config?.autoSync && (
+            {config?.autoRefreshCw && (
               <div className="space-y-2">
-                <Label>Sync Interval</Label>
+                <Label>RefreshCw Interval</Label>
                 <Select
                   value={Math.floor((config.syncInterval || 30000) / 1000).toString()}
                   onValueChange={(value) => handleIntervalChange([parseInt(value)])}

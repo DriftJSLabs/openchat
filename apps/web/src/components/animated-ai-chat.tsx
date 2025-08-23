@@ -582,6 +582,9 @@ function TypingDots() {
   );
 }
 
+/**
+ * SECURITY FIX: Safe CSS injection without innerHTML
+ */
 const rippleKeyframes = `
 @keyframes ripple {
   0% { transform: scale(0.5); opacity: 0.6; }
@@ -590,7 +593,8 @@ const rippleKeyframes = `
 `;
 
 if (typeof document !== 'undefined') {
+  // Security: Use textContent instead of innerHTML to prevent XSS
   const style = document.createElement('style');
-  style.innerHTML = rippleKeyframes;
+  style.textContent = rippleKeyframes;
   document.head.appendChild(style);
 }

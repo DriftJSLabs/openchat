@@ -32,7 +32,10 @@
 		"db:generate": {
 			"cache": false,
 			"persistent": true
+		},
+		"test": {
+			"dependsOn": ["^build"],
+			"inputs": ["src/**/*.{ts,tsx,js,jsx}", "**/*.{test,spec}.{ts,tsx,js,jsx}"]
 		}
-		
-			}
+	}
 }

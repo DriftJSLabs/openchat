@@ -9,6 +9,7 @@
     "check": "oxlint",
     "dev": "turbo dev",
     "build": "turbo build",
+    "test": "turbo test",
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
@@ -17,7 +18,10 @@
     "db:generate": "turbo -F server db:generate",
     "db:migrate": "turbo -F server db:migrate"
   },
-  "dependencies": {},
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chalk": "^5.6.0"
+  },
   "devDependencies": {
     "turbo": "^2.5.4",
     "oxlint": "^1.8.0"

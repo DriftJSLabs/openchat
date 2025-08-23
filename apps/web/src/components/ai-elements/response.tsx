@@ -372,10 +372,20 @@ export const Response = memo(
         {...props}
       >
         <HardenedMarkdown
-          allowedImagePrefixes={allowedImagePrefixes ?? ['*']}
-          allowedLinkPrefixes={allowedLinkPrefixes ?? ['*']}
+          allowedImagePrefixes={allowedImagePrefixes ?? [
+            'https://',
+            'data:image/png;base64,',
+            'data:image/jpeg;base64,',
+            'data:image/gif;base64,',
+            'data:image/webp;base64,'
+          ]}
+          allowedLinkPrefixes={allowedLinkPrefixes ?? [
+            'https://',
+            'http://localhost',
+            'mailto:'
+          ]}
           components={components}
-          defaultOrigin={defaultOrigin}
+          defaultOrigin={defaultOrigin ?? 'https://openchat.com'}
           rehypePlugins={[rehypeKatex]}
           remarkPlugins={[remarkGfm, remarkMath]}
           {...options}

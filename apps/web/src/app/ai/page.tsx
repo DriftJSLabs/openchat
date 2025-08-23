@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { authClient } from '@/lib/auth-client';
 import { LocalChatExample } from '@/components/local-chat-example';
 import { useDatabaseContext } from '@/components/database-provider';
-import { SyncSettings } from '@/components/sync-settings';
+import { RefreshCwSettings as SyncSettings } from '@/components/sync-settings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function AIPage() {
