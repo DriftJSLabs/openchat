@@ -222,7 +222,7 @@ export function RecentChatsList({ className }: { className?: string }) {
           <div className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate group-hover:text-primary">
+              <p className="text-sm font-medium text-foreground truncate">
                 {conversation.title}
               </p>
               <p className="text-xs text-muted-foreground truncate">

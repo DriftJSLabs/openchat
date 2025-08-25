@@ -1,0 +1,358 @@
+# ==============================================================================
+# OpenChat - Production Docker Compose Configuration
+# ==============================================================================
+# Production-ready configuration with security, monitoring, and scaling considerations
+
+version: '3.8'
+
+services:
+  # Production PostgreSQL with enhanced security
+  postgres:
+    image: postgres:16-alpine
+    container_name: openchat-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-openchat}
+      POSTGRES_USER: ${POSTGRES_USER:-openchat}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "127.0.0.1:5432:5432"  # Bind to localhost only
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./scripts/db/prod-init:/docker-entrypoint-initdb.d:ro
+      - ./scripts/db/postgresql-prod.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - openchat-prod-network
+    secrets:
+      - postgres_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openchat} -d ${POSTGRES_DB:-openchat}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: >
+      postgres
+        -c config_file=/etc/postgresql/postgresql.conf
+        -c ssl=on
+        -c ssl_cert_file=/var/lib/postgresql/server.crt
+        -c ssl_key_file=/var/lib/postgresql/server.key
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # Production ElectricSQL Service
+  electric:
+    image: electricsql/electric:latest
+    container_name: openchat-electric-prod
+    restart: always
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      ELECTRIC_WRITE_TO_PG_MODE: "direct_writes"
+      ELECTRIC_CLIENT_MAX_CONNECTIONS: "100"
+      LOG_LEVEL: "warn"
+      AUTH_MODE: "secure"
+      ELECTRIC_API_KEY_FILE: /run/secrets/electric_api_key
+      # Production security settings
+      ELECTRIC_CORS_ORIGINS: "${CORS_ORIGINS:-https://yourdomain.com}"
+      ELECTRIC_RATE_LIMIT_MAX_REQUESTS: "1000"
+      ELECTRIC_RATE_LIMIT_WINDOW_MS: "60000"
+    ports:
+      - "127.0.0.1:5133:5133"  # Bind to localhost, use reverse proxy
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openchat-prod-network
+    secrets:
+      - database_url
+      - electric_api_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5133/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    volumes:
+      - electric_prod_data:/electric/data
+      - electric_prod_logs:/electric/logs
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # Production Redis with authentication
+  redis:
+    image: redis:7-alpine
+    container_name: openchat-redis-prod
+    restart: always
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_prod_data:/data
+      - ./scripts/db/redis-prod.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - openchat-prod-network
+    secrets:
+      - redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: redis-server /usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.2'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # OpenChat Server Application
+  openchat-server:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile.prod
+      args:
+        NODE_ENV: production
+    container_name: openchat-server-prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL_FILE: /run/secrets/redis_url
+      PORT: 3000
+      HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      electric:
+        condition: service_healthy
+    networks:
+      - openchat-prod-network
+    secrets:
+      - database_url
+      - redis_url
+      - better_auth_secret
+      - openrouter_api_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # OpenChat Web Application
+  openchat-web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.prod
+      args:
+        NODE_ENV: production
+    container_name: openchat-web-prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      - openchat-server
+    networks:
+      - openchat-prod-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # Nginx Reverse Proxy and Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: openchat-nginx-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./scripts/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./scripts/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - ./certs:/etc/nginx/certs:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - openchat-server
+      - openchat-web
+    networks:
+      - openchat-prod-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: openchat-prometheus-prod
+    restart: always
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./scripts/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - openchat-prod-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    profiles:
+      - monitoring
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openchat-grafana-prod
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
+    ports:
+      - "127.0.0.1:3010:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./scripts/monitoring/grafana:/etc/grafana/provisioning:ro
+    networks:
+      - openchat-prod-network
+    secrets:
+      - grafana_password
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# Production Secrets
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  database_url:
+    file: ./secrets/database_url.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  redis_url:
+    file: ./secrets/redis_url.txt
+  electric_api_key:
+    file: ./secrets/electric_api_key.txt
+  better_auth_secret:
+    file: ./secrets/better_auth_secret.txt
+  openrouter_api_key:
+    file: ./secrets/openrouter_api_key.txt
+  grafana_password:
+    file: ./secrets/grafana_password.txt
+
+# Production Volumes
+volumes:
+  postgres_prod_data:
+    driver: local
+    name: openchat_postgres_prod_data
+  electric_prod_data:
+    driver: local
+    name: openchat_electric_prod_data
+  electric_prod_logs:
+    driver: local
+    name: openchat_electric_prod_logs
+  redis_prod_data:
+    driver: local
+    name: openchat_redis_prod_data
+  nginx_logs:
+    driver: local
+    name: openchat_nginx_logs
+  prometheus_data:
+    driver: local
+    name: openchat_prometheus_data
+  grafana_data:
+    driver: local
+    name: openchat_grafana_data
+
+# Production Network with Custom Subnet
+networks:
+  openchat-prod-network:
+    driver: bridge
+    name: openchat-prod-network
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

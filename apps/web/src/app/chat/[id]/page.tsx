@@ -37,7 +37,7 @@ function isValidChatId(id: string): boolean {
  * @returns Metadata object for SEO and social sharing
  */
 export async function generateMetadata({ params }: ChatPageProps): Promise<Metadata> {
-  const { id } = params;
+  const { id } = await params;
 
   // Validate chat ID format
   if (!isValidChatId(id)) {
@@ -73,7 +73,7 @@ export async function generateMetadata({ params }: ChatPageProps): Promise<Metad
  * - Responsive design
  */
 export default async function ChatPage({ params }: ChatPageProps) {
-  const { id } = params;
+  const { id } = await params;
 
   // Validate the chat ID format before proceeding
   if (!isValidChatId(id)) {

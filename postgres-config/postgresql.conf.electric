@@ -1,0 +1,139 @@
+# PostgreSQL Configuration for ElectricSQL Integration
+# This configuration enables logical replication and optimizes settings for real-time sync
+
+# =============================================================================
+# REPLICATION AND WAL SETTINGS
+# =============================================================================
+
+# Enable logical replication - REQUIRED for ElectricSQL
+wal_level = logical
+
+# Set the maximum number of replication slots
+# ElectricSQL typically uses one slot per database
+max_replication_slots = 10
+
+# Set the maximum number of logical replication workers
+max_logical_replication_workers = 10
+
+# Set the maximum number of WAL sender processes
+max_wal_senders = 10
+
+# Enable WAL archiving for point-in-time recovery (optional but recommended)
+archive_mode = on
+archive_command = 'test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f'
+
+# WAL configuration for optimal sync performance
+wal_buffers = 16MB
+wal_writer_delay = 200ms
+commit_delay = 100000
+commit_siblings = 5
+
+# =============================================================================
+# MEMORY AND PERFORMANCE SETTINGS
+# =============================================================================
+
+# Shared memory settings (adjust based on available RAM)
+shared_buffers = 256MB
+effective_cache_size = 1GB
+work_mem = 16MB
+maintenance_work_mem = 256MB
+
+# Connection settings
+max_connections = 200
+shared_preload_libraries = 'pg_stat_statements'
+
+# =============================================================================
+# LOGGING AND MONITORING
+# =============================================================================
+
+# Enable comprehensive logging for debugging sync issues
+log_destination = 'stderr'
+logging_collector = on
+log_directory = '/var/log/postgresql'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_rotation_age = 1d
+log_rotation_size = 10MB
+
+# Log levels for troubleshooting
+log_min_messages = warning
+log_min_error_statement = error
+log_min_duration_statement = 1000  # Log queries taking more than 1 second
+
+# Replication-specific logging
+log_line_prefix = '%t [%p-%l] %q%u@%d '
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_lock_waits = on
+
+# =============================================================================
+# ELECTRIC-SPECIFIC SETTINGS
+# =============================================================================
+
+# Track commit timestamps for better conflict resolution
+track_commit_timestamp = on
+
+# Enable row-level security (used by ElectricSQL for data isolation)
+row_security = on
+
+# Timezone settings (important for consistent timestamps across sync)
+timezone = 'UTC'
+log_timezone = 'UTC'
+
+# =============================================================================
+# SECURITY AND RELIABILITY
+# =============================================================================
+
+# SSL settings (enable for production)
+# ssl = on
+# ssl_cert_file = 'server.crt'
+# ssl_key_file = 'server.key'
+# ssl_ca_file = 'ca.crt'
+
+# Statement timeout to prevent long-running queries from blocking replication
+statement_timeout = 30000  # 30 seconds
+
+# Lock timeout to prevent deadlocks in high-concurrency scenarios
+lock_timeout = 10000  # 10 seconds
+
+# Idle transaction timeout to clean up stale connections
+idle_in_transaction_session_timeout = 300000  # 5 minutes
+
+# =============================================================================
+# ADDITIONAL OPTIMIZATIONS
+# =============================================================================
+
+# Optimize for real-time applications
+fsync = on  # Keep enabled for data safety
+synchronous_commit = on  # Ensure WAL is written before commit returns
+wal_sync_method = fdatasync
+
+# Autovacuum settings for maintaining performance under high sync load
+autovacuum = on
+autovacuum_max_workers = 3
+autovacuum_naptime = 1min
+autovacuum_vacuum_threshold = 50
+autovacuum_analyze_threshold = 50
+autovacuum_vacuum_scale_factor = 0.2
+autovacuum_analyze_scale_factor = 0.1
+
+# Background writer settings
+bgwriter_delay = 200ms
+bgwriter_lru_maxpages = 100
+bgwriter_lru_multiplier = 2.0
+
+# Checkpoint settings for balanced performance and recovery time
+checkpoint_segments = 32
+checkpoint_completion_target = 0.9
+checkpoint_timeout = 5min
+
+# =============================================================================
+# DEVELOPMENT SETTINGS (remove in production)
+# =============================================================================
+
+# Enable detailed query logging for development
+# log_statement = 'all'
+# log_duration = on
+
+# Enable detailed replication logging for debugging
+# log_replication_commands = on

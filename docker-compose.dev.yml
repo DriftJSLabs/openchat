@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Development Server (Backend)
+  dev-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: openchat-dev-server
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://openchat:yktBNut9mexFzOjoKoz7s3CmE3ecNvhf@openchat-postgres:5432/openchat_dev
+      - NODE_ENV=development
+      - ELECTRIC_INSECURE=true
+      - BETTER_AUTH_SECRET=dev-secret-key-minimum-32-characters-for-development-only
+      - BETTER_AUTH_URL=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:3001
+    volumes:
+      - ./apps/server:/app/apps/server
+      - ./package.json:/app/package.json
+      - ./bun.lockb:/app/bun.lockb
+    networks:
+      - openchat-network
+    depends_on:
+      - postgres
+    command: ["bun", "--hot", "src/dev.ts"]
+    restart: unless-stopped
+
+  # Development Web App (Frontend)
+  dev-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: openchat-dev-web
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./package.json:/app/package.json
+    networks:
+      - openchat-network
+    command: ["bun", "run", "dev", "--port", "3001"]
+    restart: unless-stopped
+
+networks:
+  openchat-network:
+    external: true

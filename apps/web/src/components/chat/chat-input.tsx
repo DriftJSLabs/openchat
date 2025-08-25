@@ -68,6 +68,30 @@ export interface ChatInputProps extends Omit<PromptInputProps, 'onSubmit'> {
   onVoiceCancel?: () => void;
   /** Whether voice recording is active */
   isRecording?: boolean;
+  /** Typing indicator configuration */
+  typingIndicator?: {
+    enabled: boolean;
+    onTypingStart?: () => void;
+    onTypingStop?: () => void;
+    typingTimeout?: number;
+  };
+  /** Whether someone else is typing */
+  isOthersTyping?: boolean;
+  /** Who is typing (for display) */
+  typingUsers?: string[];
+  /** Drag and drop configuration */
+  dragAndDrop?: {
+    enabled: boolean;
+    allowedTypes?: string[];
+    maxFileSize?: number;
+    maxFiles?: number;
+  };
+  /** Auto-save draft configuration */
+  autoSave?: {
+    enabled: boolean;
+    key?: string;
+    interval?: number;
+  };
 }
 
 /**
@@ -112,6 +136,11 @@ export function ChatInput({
   onVoiceStop,
   onVoiceCancel,
   isRecording = false,
+  typingIndicator,
+  isOthersTyping = false,
+  typingUsers = [],
+  dragAndDrop,
+  autoSave,
   ...props
 }: ChatInputProps) {
   const { 
@@ -121,14 +150,62 @@ export function ChatInput({
     onStopStream,
     error: chatError
   } = useChatContainer();
+  
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [charCount, setCharCount] = useState(value.length);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Update character count when value changes
   useEffect(() => {
     setCharCount(value.length);
   }, [value]);
+
+  // Auto-save draft functionality
+  useEffect(() => {
+    if (!autoSave?.enabled || !autoSave.key || !value) return;
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      localStorage.setItem(`chat-draft-${autoSave.key}`, value);
+    }, autoSave.interval || 1000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [value, autoSave]);
+
+  // Load saved draft on mount
+  useEffect(() => {
+    if (autoSave?.enabled && autoSave.key && !value) {
+      const savedDraft = localStorage.getItem(`chat-draft-${autoSave.key}`);
+      if (savedDraft) {
+        onChange?.(savedDraft);
+      }
+    }
+  }, [autoSave, onChange, value]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Handle form submission with enhanced error handling and state management
@@ -153,7 +230,7 @@ export function ChatInput({
   }, [value, disabled, isStreaming, isSyncing, onSubmit, onSendMessage, onChange]);
 
   /**
-   * Handle textarea value changes
+   * Handle textarea value changes with typing indicator support
    */
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -164,7 +241,33 @@ export function ChatInput({
     }
     
     onChange?.(newValue);
-  }, [onChange, maxLength]);
+
+    // Handle typing indicator
+    if (typingIndicator?.enabled) {
+      // Start typing if not already typing
+      if (!isTyping && newValue.trim()) {
+        setIsTyping(true);
+        typingIndicator.onTypingStart?.();
+      }
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout to stop typing
+      if (newValue.trim()) {
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+          typingIndicator.onTypingStop?.();
+        }, typingIndicator.typingTimeout || 3000);
+      } else {
+        // Stop typing immediately if input is empty
+        setIsTyping(false);
+        typingIndicator.onTypingStop?.();
+      }
+    }
+  }, [onChange, maxLength, typingIndicator, isTyping]);
 
   /**
    * Handle file selection
@@ -174,17 +277,106 @@ export function ChatInput({
   }, []);
 
   /**
+   * Validate file for upload
+   */
+  const validateFile = useCallback((file: File): boolean => {
+    if (!dragAndDrop?.enabled && !supportsFileUpload) return false;
+
+    const config = dragAndDrop || { enabled: true };
+    
+    // Check file size
+    if (config.maxFileSize && file.size > config.maxFileSize) {
+      console.warn(`File ${file.name} is too large. Maximum size is ${config.maxFileSize} bytes.`);
+      return false;
+    }
+
+    // Check file type
+    if (config.allowedTypes && !config.allowedTypes.some(type => {
+      if (type.startsWith('.')) {
+        return file.name.toLowerCase().endsWith(type.toLowerCase());
+      } else if (type.includes('*')) {
+        const [category] = type.split('/');
+        return file.type.startsWith(category);
+      } else {
+        return file.type === type;
+      }
+    })) {
+      console.warn(`File type ${file.type} is not allowed.`);
+      return false;
+    }
+
+    return true;
+  }, [dragAndDrop, supportsFileUpload]);
+
+  /**
    * Handle file input change
    */
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setAttachedFiles(prev => [...prev, ...Array.from(files)]);
-      onFileUpload?.(files);
+      const validFiles = Array.from(files).filter(validateFile);
+      
+      // Check max files limit
+      const config = dragAndDrop || { enabled: true };
+      const currentFileCount = attachedFiles.length;
+      const maxFiles = config.maxFiles || 10;
+      const filesToAdd = validFiles.slice(0, maxFiles - currentFileCount);
+      
+      if (filesToAdd.length > 0) {
+        setAttachedFiles(prev => [...prev, ...filesToAdd]);
+        onFileUpload?.(e.target.files as FileList);
+      }
     }
     // Reset the input
     e.target.value = '';
-  }, [onFileUpload]);
+  }, [onFileUpload, validateFile, dragAndDrop, attachedFiles.length]);
+
+  /**
+   * Handle drag and drop events
+   */
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragAndDrop?.enabled || supportsFileUpload) {
+      setIsDragActive(true);
+    }
+  }, [dragAndDrop, supportsFileUpload]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    if (!dragAndDrop?.enabled && !supportsFileUpload) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const validFiles = files.filter(validateFile);
+    
+    // Check max files limit
+    const config = dragAndDrop || { enabled: true };
+    const currentFileCount = attachedFiles.length;
+    const maxFiles = config.maxFiles || 10;
+    const filesToAdd = validFiles.slice(0, maxFiles - currentFileCount);
+    
+    if (filesToAdd.length > 0) {
+      setAttachedFiles(prev => [...prev, ...filesToAdd]);
+      // Create a synthetic FileList for the callback
+      const fileList = new DataTransfer();
+      filesToAdd.forEach(file => fileList.items.add(file));
+      onFileUpload?.(fileList.files);
+    }
+  }, [dragAndDrop, supportsFileUpload, validateFile, attachedFiles.length, onFileUpload]);
 
   /**
    * Remove attached file
@@ -221,6 +413,27 @@ export function ChatInput({
 
   return (
     <div className={cn('w-full space-y-3', className)}>
+      {/* Typing indicator for others */}
+      {isOthersTyping && typingUsers.length > 0 && (
+        <div className="px-3 py-2 text-sm text-muted-foreground animate-pulse">
+          <div className="flex items-center gap-2">
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="w-2 h-2 bg-current rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="w-2 h-2 bg-current rounded-full animate-bounce"></div>
+            </div>
+            <span>
+              {typingUsers.length === 1 
+                ? `${typingUsers[0]} is typing...`
+                : typingUsers.length === 2
+                ? `${typingUsers[0]} and ${typingUsers[1]} are typing...`
+                : `${typingUsers.length} people are typing...`
+              }
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Attached files display */}
       {attachedFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 px-3">
@@ -230,6 +443,9 @@ export function ChatInput({
               className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 text-sm"
             >
               <span className="truncate max-w-32">{file.name}</span>
+              <span className="text-xs text-muted-foreground">
+                ({(file.size / 1024).toFixed(1)}KB)
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -244,26 +460,47 @@ export function ChatInput({
         </div>
       )}
 
-      {/* Main input form */}
-      <PromptInput
+      {/* Main input form with drag and drop */}
+      <div
         className={cn(
-          'transition-shadow duration-200',
-          isRecording && 'ring-2 ring-destructive ring-offset-2',
-          className
+          'relative',
+          isDragActive && 'ring-2 ring-primary ring-offset-2 bg-primary/5'
         )}
-        onSubmit={handleSubmit}
-        {...props}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
-        {/* Main textarea */}
-        <PromptInputTextarea
-          value={value}
-          onChange={handleTextareaChange}
-          placeholder={placeholder}
-          disabled={disabled}
-          aria-label="Message input"
-          aria-describedby="char-count"
-          maxLength={maxLength}
-        />
+        {/* Drag overlay */}
+        {isDragActive && (
+          <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-lg z-10 flex items-center justify-center">
+            <div className="text-center">
+              <Paperclip className="h-8 w-8 text-primary mx-auto mb-2" />
+              <p className="text-sm font-medium text-primary">Drop files here</p>
+            </div>
+          </div>
+        )}
+
+        <PromptInput
+          className={cn(
+            'transition-shadow duration-200',
+            isRecording && 'ring-2 ring-destructive ring-offset-2',
+            isDragActive && 'pointer-events-none'
+          )}
+          onSubmit={handleSubmit}
+          {...props}
+        >
+          {/* Main textarea */}
+          <PromptInputTextarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleTextareaChange}
+            placeholder={placeholder}
+            disabled={disabled}
+            aria-label="Message input"
+            aria-describedby="char-count"
+            maxLength={maxLength}
+          />
 
         {/* Toolbar */}
         <PromptInputToolbar>
@@ -387,7 +624,8 @@ export function ChatInput({
             />
           </div>
         </PromptInputToolbar>
-      </PromptInput>
+        </PromptInput>
+      </div>
 
       {/* Voice recording indicator */}
       {isRecording && (

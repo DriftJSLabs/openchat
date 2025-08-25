@@ -1,0 +1,144 @@
+# Dockerfile for ElectricSQL Service with OpenChat Integration
+# This Dockerfile creates a custom ElectricSQL service image with OpenChat-specific
+# configurations, monitoring, and development tools.
+
+# Use the official ElectricSQL image as base
+FROM electricsql/electric:latest as base
+
+# Set working directory
+WORKDIR /app
+
+# Install additional tools for development and monitoring
+RUN apk add --no-cache \
+    curl \
+    jq \
+    postgresql-client \
+    redis \
+    netcat-openbsd \
+    bash \
+    htop \
+    nano
+
+# =============================================================================
+# DEVELOPMENT STAGE
+# =============================================================================
+FROM base as development
+
+# Install development tools
+RUN apk add --no-cache \
+    git \
+    nodejs \
+    npm \
+    python3 \
+    py3-pip \
+    make \
+    g++
+
+# Install monitoring and debugging tools
+RUN npm install -g \
+    pm2 \
+    nodemon \
+    @electric-sql/cli
+
+# Copy custom configuration files
+COPY electric-config/ /app/config/
+COPY monitoring/ /app/monitoring/
+COPY scripts/ /app/scripts/
+
+# Copy environment configuration
+COPY .env.electric.example /app/.env.example
+
+# Create log directories
+RUN mkdir -p /var/log/electric \
+    && mkdir -p /app/logs \
+    && mkdir -p /app/backups
+
+# Set permissions
+RUN chown -R electric:electric /var/log/electric \
+    && chown -R electric:electric /app/logs \
+    && chown -R electric:electric /app/backups \
+    && chmod +x /app/scripts/*.sh
+
+# Create health check script
+RUN echo '#!/bin/bash\n\
+curl -f http://localhost:${ELECTRIC_PORT:-5133}/health || exit 1\n\
+' > /app/healthcheck.sh && chmod +x /app/healthcheck.sh
+
+# Expose ports
+EXPOSE 5133
+EXPOSE 9090  # Metrics port
+EXPOSE 8080  # Debug port
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD /app/healthcheck.sh
+
+# Set user
+USER electric
+
+# Default command
+CMD ["electric", "start", "--config", "/app/config/electric.yaml"]
+
+# =============================================================================
+# PRODUCTION STAGE
+# =============================================================================
+FROM base as production
+
+# Copy only necessary configuration files for production
+COPY electric-config/electric.yaml /app/config/electric.yaml
+COPY scripts/electric-start.sh /app/scripts/electric-start.sh
+
+# Create log directories
+RUN mkdir -p /var/log/electric \
+    && chown -R electric:electric /var/log/electric
+
+# Set permissions
+RUN chmod +x /app/scripts/electric-start.sh
+
+# Create optimized health check script
+RUN echo '#!/bin/bash\n\
+curl -f -m 5 http://localhost:${ELECTRIC_PORT:-5133}/health || exit 1\n\
+' > /app/healthcheck.sh && chmod +x /app/healthcheck.sh
+
+# Expose only necessary ports
+EXPOSE 5133
+
+# Health check with shorter intervals for production
+HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=5 \
+    CMD /app/healthcheck.sh
+
+# Set user
+USER electric
+
+# Production command with optimizations
+CMD ["electric", "start", "--config", "/app/config/electric.yaml", "--log-level", "warn"]
+
+# =============================================================================
+# MULTI-STAGE BUILD TARGET SELECTION
+# =============================================================================
+# Use build argument to select stage
+ARG BUILD_STAGE=development
+FROM ${BUILD_STAGE} as final
+
+# Add labels for container metadata
+LABEL maintainer="OpenChat Team" \
+      version="1.0.0" \
+      description="ElectricSQL service with OpenChat integration" \
+      org.opencontainers.image.title="OpenChat ElectricSQL Service" \
+      org.opencontainers.image.description="Real-time sync service for OpenChat application" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.vendor="OpenChat" \
+      org.opencontainers.image.licenses="MIT"
+
+# Environment variables with defaults
+ENV ELECTRIC_HOST=0.0.0.0 \
+    ELECTRIC_PORT=5133 \
+    LOG_LEVEL=info \
+    LOG_FORMAT=json \
+    ENABLE_METRICS=true \
+    ENABLE_DEBUG_ENDPOINTS=false \
+    MAX_CONCURRENT_SHAPES=50 \
+    SHAPE_CACHE_TTL=5m
+
+# Final setup
+RUN echo "ElectricSQL service ready for OpenChat integration" > /app/ready

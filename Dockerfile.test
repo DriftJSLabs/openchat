@@ -1,0 +1,19 @@
+FROM oven/bun:1
+
+WORKDIR /app
+COPY package.json bun.lockb ./
+COPY apps/server/package.json ./apps/server/
+RUN bun install
+
+COPY apps/server ./apps/server
+COPY turbo.json ./
+
+WORKDIR /app/apps/server
+ENV DATABASE_URL=postgresql://openchat:openchat_dev@test-postgres:5432/openchat_dev
+ENV NODE_ENV=development
+ENV BETTER_AUTH_SECRET=dev-secret-key-minimum-32-characters-for-development-only
+ENV BETTER_AUTH_URL=http://localhost:3000
+ENV CORS_ORIGIN=http://localhost:3001
+
+EXPOSE 3000
+CMD ["bun", "--hot", "src/dev.ts"]

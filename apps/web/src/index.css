@@ -64,12 +64,12 @@
   --chart-5: #581C87;
   --sidebar: var(--base-sidebar);
   --sidebar-foreground: var(--base-sidebar-foreground);
-  --sidebar-primary: #9333EA;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: var(--base-sidebar-accent);
-  --sidebar-accent-foreground: var(--base-sidebar-accent-foreground);
+  --sidebar-primary: var(--base-muted);
+  --sidebar-primary-foreground: var(--base-muted-foreground);
+  --sidebar-accent: var(--base-muted);
+  --sidebar-accent-foreground: var(--base-muted-foreground);
   --sidebar-border: var(--base-sidebar-border);
-  --sidebar-ring: #9333EA;
+  --sidebar-ring: var(--base-muted);
   --font-sans: Outfit, sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: monospace;

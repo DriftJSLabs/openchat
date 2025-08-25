@@ -1,0 +1,206 @@
+# ==============================================================================
+# Prometheus Alert Rules for OpenChat
+# ==============================================================================
+# This file contains alerting rules for monitoring OpenChat services
+
+groups:
+  - name: openchat.rules
+    interval: 30s
+    rules:
+      # Application Health Alerts
+      - alert: OpenChatServerDown
+        expr: up{job="openchat-server"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: openchat-server
+        annotations:
+          summary: "OpenChat server is down"
+          description: "OpenChat server has been down for more than 30 seconds."
+
+      - alert: OpenChatWebDown
+        expr: up{job="openchat-web"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: openchat-web
+        annotations:
+          summary: "OpenChat web application is down"
+          description: "OpenChat web application has been down for more than 1 minute."
+
+      # Database Alerts
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database has been down for more than 30 seconds."
+
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "PostgreSQL connection usage is above 80% for more than 5 minutes."
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "PostgreSQL is experiencing slow queries. Check query performance."
+
+      # ElectricSQL Alerts
+      - alert: ElectricSQLDown
+        expr: up{job="electric"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: electric
+        annotations:
+          summary: "ElectricSQL service is down"
+          description: "ElectricSQL service has been down for more than 1 minute."
+
+      - alert: ElectricSQLSyncLag
+        expr: electric_sync_lag_seconds > 30
+        for: 2m
+        labels:
+          severity: warning
+          service: electric
+        annotations:
+          summary: "ElectricSQL sync lag detected"
+          description: "ElectricSQL sync lag is {{ $value }} seconds, which is above the 30-second threshold."
+
+      # Redis Alerts
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache has been down for more than 1 minute."
+
+      - alert: RedisMemoryUsageHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis memory usage is above 80% for more than 5 minutes."
+
+      # System Resource Alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 15
+        for: 2m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 15% on device {{ $labels.device }}."
+
+      # Application Performance Alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: openchat
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is above 2 seconds for more than 5 minutes."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: openchat
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for more than 2 minutes."
+
+      - alert: LowThroughput
+        expr: rate(http_requests_total[5m]) < 1
+        for: 10m
+        labels:
+          severity: warning
+          service: openchat
+        annotations:
+          summary: "Low request throughput"
+          description: "Request throughput is below 1 request/second for more than 10 minutes."
+
+      # Chat-specific Alerts
+      - alert: HighChatCreationFailures
+        expr: rate(openchat_chat_creation_failures_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: openchat-server
+        annotations:
+          summary: "High chat creation failure rate"
+          description: "Chat creation failure rate is above 10% for more than 2 minutes."
+
+      - alert: MessageDeliveryLag
+        expr: openchat_message_delivery_lag_seconds > 5
+        for: 1m
+        labels:
+          severity: warning
+          service: openchat
+        annotations:
+          summary: "Message delivery lag detected"
+          description: "Message delivery lag is {{ $value }} seconds, which is above the 5-second threshold."
+
+      # Security Alerts
+      - alert: TooManyFailedAuthAttempts
+        expr: rate(openchat_auth_failures_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Too many failed authentication attempts"
+          description: "Failed authentication attempts are above 10/minute for more than 1 minute."
+
+      - alert: SuspiciousActivity
+        expr: rate(openchat_suspicious_requests_total[5m]) > 1
+        for: 30s
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious activity rate is above 1/minute. Possible security incident."

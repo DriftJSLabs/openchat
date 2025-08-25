@@ -1,0 +1,22 @@
+
+version: '3.8'
+services:
+  convex-backend:
+    image: gcr.io/convex-dev/convex-backend:latest
+    container_name: openchat-convex
+    ports:
+      - "3210:3210"
+    environment:
+      - POSTGRES_URL=postgresql://openchat:openchat_dev@host.docker.internal:5432
+      - DO_NOT_REQUIRE_SSL=1
+    volumes:
+      - /home/gl1/openchat/.convex-local:/data
+    depends_on:
+      - postgres-host
+  
+  postgres-host:
+    image: alpine/socat
+    container_name: openchat-postgres-host
+    command: "TCP4-LISTEN:5432,fork,reuseaddr TCP4:host.docker.internal:5432"
+    ports:
+      - "5433:5432"

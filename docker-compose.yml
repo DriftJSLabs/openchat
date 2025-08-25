@@ -1,0 +1,236 @@
+# ==============================================================================
+# OpenChat - Docker Compose Configuration
+# ==============================================================================
+# This file defines the complete development environment including:
+# - PostgreSQL database with proper configuration
+# - ElectricSQL service for real-time synchronization
+# - Redis for caching (optional)
+# - Development database setup with proper networking
+# SECURITY: This is for DEVELOPMENT ONLY - use docker-compose.prod.yml for production
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:17-alpine
+    container_name: openchat-postgres
+    restart: unless-stopped
+    environment:
+      # Database configuration - using standard md5 authentication
+      POSTGRES_DB: openchat_dev
+      POSTGRES_USER: openchat
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      # Use md5 authentication for secure password-based connections
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+    secrets:
+      - postgres_password
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent database storage
+      - postgres_data:/var/lib/postgresql/data
+      # Custom initialization scripts
+      - ./scripts/db/init:/docker-entrypoint-initdb.d
+    networks:
+      - openchat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openchat -d openchat_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      postgres
+        -c log_statement=all
+        -c log_destination=stderr
+        -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+        -c max_connections=200
+        -c shared_preload_libraries=pg_stat_statements
+
+  # Test Database Service (separate for testing)
+  postgres-test:
+    image: postgres:17-alpine
+    container_name: openchat-postgres-test
+    restart: unless-stopped
+    environment:
+      # Test database configuration - using standard md5 authentication
+      POSTGRES_DB: openchat_test
+      POSTGRES_USER: openchat
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_test_password
+      # Use md5 authentication for secure password-based connections
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+    secrets:
+      - postgres_test_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - openchat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openchat -d openchat_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ElectricSQL Service for Real-time Synchronization
+  electric:
+    image: electricsql/electric:latest
+    container_name: openchat-electric
+    restart: unless-stopped
+    environment:
+      # ElectricSQL configuration - using Docker secrets for sensitive data
+      DATABASE_URL_FILE: /run/secrets/electric_database_url
+      ELECTRIC_WRITE_TO_PG_MODE: "direct_writes"
+      ELECTRIC_CLIENT_MAX_CONNECTIONS: "50"
+      LOG_LEVEL: "info"
+      # Authentication settings - INSECURE MODE FOR DEVELOPMENT ONLY
+      AUTH_MODE: "insecure"  # WARNING: Use "secure" in production
+      # ELECTRIC_API_KEY_FILE: /run/secrets/electric_api_key  # Uncomment for production
+    secrets:
+      - electric_database_url
+    ports:
+      - "5133:5133"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openchat-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5133/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      # ElectricSQL configuration and logs
+      - electric_data:/electric/data
+      - electric_logs:/electric/logs
+
+  # Redis Service for Caching (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: openchat-redis
+    restart: unless-stopped
+    environment:
+      # Redis configuration - using Docker secrets
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      # Redis persistent storage
+      - redis_data:/data
+      # Custom Redis configuration
+      - ./scripts/db/redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - openchat-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+  # PgAdmin for Database Management (Development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: openchat-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@openchat.dev
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_password
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    secrets:
+      - pgadmin_password
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - openchat-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./scripts/db/pgadmin-servers.json:/pgadmin4/servers.json
+    profiles:
+      - development
+      - admin-tools
+
+  # Database Migration Service
+  migrator:
+    build:
+      context: .
+      dockerfile: scripts/db/Dockerfile.migrator
+    container_name: openchat-migrator
+    environment:
+      DATABASE_URL_FILE: /run/secrets/migrator_database_url
+      NODE_ENV: development
+    secrets:
+      - migrator_database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openchat-network
+    volumes:
+      - ./apps/server/src/db/migrations:/app/migrations
+      - ./scripts/db:/app/scripts
+    profiles:
+      - migration
+      - setup
+
+# Named Volumes for Persistent Storage
+volumes:
+  # PostgreSQL data volumes
+  postgres_data:
+    driver: local
+    name: openchat_postgres_data
+  postgres_test_data:
+    driver: local  
+    name: openchat_postgres_test_data
+  
+  # ElectricSQL data volumes
+  electric_data:
+    driver: local
+    name: openchat_electric_data
+  electric_logs:
+    driver: local
+    name: openchat_electric_logs
+  
+  # Redis data volume
+  redis_data:
+    driver: local
+    name: openchat_redis_data
+  
+  # PgAdmin data volume
+  pgadmin_data:
+    driver: local
+    name: openchat_pgadmin_data
+
+# Custom Network for Service Communication
+networks:
+  openchat-network:
+    driver: bridge
+    name: openchat-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Docker Secrets for Secure Credential Management
+# SECURITY: These are development secrets. Use external secrets in production.
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  postgres_test_password:
+    file: ./secrets/postgres_test_password.txt
+  electric_database_url:
+    file: ./secrets/electric_database_url.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  pgadmin_password:
+    file: ./secrets/pgadmin_password.txt
+  migrator_database_url:
+    file: ./secrets/migrator_database_url.txt

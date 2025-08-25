@@ -1,25 +1,140 @@
 {
 	"$schema": "https://turbo.build/schema.json",
 	"ui": "tui",
+	"globalDependencies": [".env*", "docker-compose.yml", "scripts/**/*"],
+	"globalEnv": ["NODE_ENV", "CI", "VERCEL", "DATABASE_URL"],
 	"tasks": {
 		"build": {
-			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": ["dist/**"]
+			"dependsOn": ["^build", "check-types"],
+			"inputs": [
+				"$TURBO_DEFAULT$", 
+				".env*",
+				"public/**",
+				"src/**",
+				"package.json",
+				"tsconfig.json",
+				"next.config.*",
+				"tailwind.config.*",
+				"postcss.config.*"
+			],
+			"outputs": [
+				"dist/**", 
+				".next/**", 
+				"build/**",
+				"out/**"
+			]
+		},
+		"build:prod": {
+			"dependsOn": ["^build", "lint", "check-types", "test"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env.production",
+				"public/**",
+				"src/**"
+			],
+			"outputs": ["dist/**", ".next/**", "build/**"],
+			"env": ["NODE_ENV=production"]
 		},
 		"lint": {
-			"dependsOn": ["^lint"]
+			"dependsOn": ["^lint"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"**/*.{ts,tsx,js,jsx}",
+				".eslintrc*",
+				"eslint.config.*"
+			],
+			"outputs": []
+		},
+		"lint:fix": {
+			"dependsOn": ["^lint:fix"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"**/*.{ts,tsx,js,jsx}"
+			],
+			"outputs": [],
+			"cache": false
 		},
 		"check-types": {
-			"dependsOn": ["^check-types"]
+			"dependsOn": ["^check-types"],
+			"inputs": [
+				"src/**/*.{ts,tsx}",
+				"**/*.{ts,tsx}",
+				"tsconfig.json",
+				"tsconfig.*.json"
+			],
+			"outputs": ["**/*.tsbuildinfo"]
 		},
 		"dev": {
 			"cache": false,
+			"persistent": true,
+			"dependsOn": ["^build"]
+		},
+		"start": {
+			"dependsOn": ["build"],
+			"cache": false,
 			"persistent": true
+		},
+		"preview": {
+			"dependsOn": ["build"],
+			"cache": false,
+			"persistent": true
+		},
+		"test": {
+			"dependsOn": ["^build", "check-types"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"**/*.{test,spec}.{ts,tsx,js,jsx}",
+				"vitest.config.*",
+				"jest.config.*",
+				"playwright.config.*"
+			],
+			"outputs": [
+				"coverage/**",
+				"test-results/**",
+				"playwright-report/**"
+			]
+		},
+		"test:unit": {
+			"dependsOn": ["^build"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"**/*.{test,spec}.{ts,tsx,js,jsx}"
+			],
+			"outputs": ["coverage/**"]
+		},
+		"test:integration": {
+			"dependsOn": ["^build"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"**/*.integration.{test,spec}.{ts,tsx,js,jsx}"
+			],
+			"outputs": ["coverage/**", "test-results/**"]
+		},
+		"test:e2e": {
+			"dependsOn": ["build"],
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx}",
+				"e2e/**/*.{ts,js}",
+				"playwright.config.*"
+			],
+			"outputs": ["playwright-report/**", "test-results/**"],
+			"cache": false
+		},
+		"test:watch": {
+			"cache": false,
+			"persistent": true
+		},
+		"test:coverage": {
+			"dependsOn": ["test"],
+			"outputs": ["coverage/**"]
 		},
 		"db:push": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"inputs": [
+				"src/db/schema/**/*.{ts,sql}",
+				"drizzle.config.*"
+			]
 		},
 		"db:studio": {
 			"cache": false,
@@ -27,15 +142,71 @@
 		},
 		"db:migrate": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"inputs": [
+				"src/db/migrations/**/*.sql",
+				"drizzle.config.*"
+			]
 		},
 		"db:generate": {
 			"cache": false,
+			"persistent": true,
+			"inputs": [
+				"src/db/schema/**/*.ts",
+				"drizzle.config.*"
+			],
+			"outputs": ["src/db/migrations/**"]
+		},
+		"db:seed": {
+			"cache": false,
+			"dependsOn": ["db:migrate"],
+			"inputs": ["src/db/seeds/**/*.ts"]
+		},
+		"db:reset": {
+			"cache": false,
+			"dependsOn": ["db:migrate", "db:seed"]
+		},
+		"clean": {
+			"cache": false,
+			"outputs": []
+		},
+		"format": {
+			"cache": false,
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx,json,md}",
+				"**/*.{ts,tsx,js,jsx,json,md}"
+			],
+			"outputs": []
+		},
+		"format:check": {
+			"inputs": [
+				"src/**/*.{ts,tsx,js,jsx,json,md}",
+				"**/*.{ts,tsx,js,jsx,json,md}"
+			],
+			"outputs": []
+		},
+		"security:audit": {
+			"inputs": ["package.json", "bun.lockb"],
+			"outputs": []
+		},
+		"docker:build": {
+			"dependsOn": ["build"],
+			"inputs": [
+				"Dockerfile*",
+				"docker-compose*.yml",
+				".dockerignore",
+				"dist/**",
+				".next/**"
+			],
+			"outputs": [],
+			"cache": false
+		},
+		"docker:up": {
+			"cache": false,
 			"persistent": true
 		},
-		"test": {
-			"dependsOn": ["^build"],
-			"inputs": ["src/**/*.{ts,tsx,js,jsx}", "**/*.{test,spec}.{ts,tsx,js,jsx}"]
+		"docker:down": {
+			"cache": false
 		}
 	}
 }

@@ -713,14 +713,23 @@ export const chatRouter = {
           };
 
         case "markdown":
-          let markdown = `# ${chatData[0].title}\n\n`;
-          markdown += `**Created:** ${chatData[0].createdAt.toISOString()}\n`;
-          markdown += `**Messages:** ${messages.length}\n\n`;
+          let markdown = `# ${chatData[0].title}
+
+`;
+          markdown += `**Created:** ${chatData[0].createdAt.toISOString()}
+`;
+          markdown += `**Messages:** ${messages.length}
+
+`;
           markdown += "---\n\n";
 
           for (const msg of messages) {
-            markdown += `**${msg.role.toUpperCase()}** (${msg.createdAt.toISOString()})\n\n`;
-            markdown += `${msg.content}\n\n`;
+            markdown += `**${msg.role.toUpperCase()}** (${msg.createdAt.toISOString()})
+
+`;
+            markdown += `${msg.content}
+
+`;
             markdown += "---\n\n";
           }
 
@@ -731,14 +740,21 @@ export const chatRouter = {
           };
 
         case "plain":
-          let plainText = `${chatData[0].title}\n`;
-          plainText += `Created: ${chatData[0].createdAt.toISOString()}\n`;
-          plainText += `Messages: ${messages.length}\n\n`;
+          let plainText = `${chatData[0].title}
+`;
+          plainText += `Created: ${chatData[0].createdAt.toISOString()}
+`;
+          plainText += `Messages: ${messages.length}
+
+`;
           plainText += "=" + "=".repeat(50) + "\n\n";
 
           for (const msg of messages) {
-            plainText += `[${msg.role.toUpperCase()}] ${msg.createdAt.toISOString()}\n`;
-            plainText += `${msg.content}\n\n`;
+            plainText += `[${msg.role.toUpperCase()}] ${msg.createdAt.toISOString()}
+`;
+            plainText += `${msg.content}
+
+`;
             plainText += "-".repeat(50) + "\n\n";
           }
 

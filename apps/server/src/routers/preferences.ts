@@ -480,7 +480,11 @@ export const preferencesRouter = {
           
           return {
             ...exportResult,
-            data: `# User Preferences Export\n# Exported at: ${exportResult.exportedAt}\n# Version: ${exportResult.version}\n\n${yamlData}`,
+            data: `# User Preferences Export
+# Exported at: ${exportResult.exportedAt}
+# Version: ${exportResult.version}
+
+${yamlData}`,
             filename: `preferences_${Date.now()}.yaml`,
           };
         }

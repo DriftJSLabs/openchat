@@ -1,0 +1,367 @@
+# Docker Compose configuration for ElectricSQL service with OpenChat
+# This file provides a complete local development environment including:
+# - PostgreSQL with logical replication enabled
+# - ElectricSQL sync service
+# - Redis for caching (optional)
+# - Monitoring and logging services
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # POSTGRESQL DATABASE WITH LOGICAL REPLICATION
+  # =============================================================================
+  postgres-electric:
+    image: postgres:17-alpine
+    container_name: openchat-postgres-electric
+    restart: unless-stopped
+    environment:
+      # Database configuration
+      POSTGRES_DB: openchat
+      POSTGRES_USER: openchat
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_electric_password
+    secrets:
+      - postgres_electric_password
+      
+      # Additional users and databases
+      POSTGRES_MULTIPLE_EXTENSIONS: "pg_stat_statements"
+      
+    volumes:
+      # Mount custom PostgreSQL configuration
+      - ./postgres-config/postgresql.conf.electric:/etc/postgresql/postgresql.conf:ro
+      
+      # Mount initialization scripts
+      - ./postgres-config/setup-replication.sql:/docker-entrypoint-initdb.d/01-setup-replication.sql:ro
+      
+      # Data persistence
+      - postgres_electric_data:/var/lib/postgresql/data
+      
+      # Logs
+      - postgres_electric_logs:/var/log/postgresql
+      
+      # Archive directory for WAL files
+      - postgres_electric_archive:/var/lib/postgresql/archive
+      
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+      
+    networks:
+      - openchat-electric
+      
+    command: 
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_destination=stderr
+      - -c
+      - logging_collector=on
+      - -c
+      - log_directory=/var/log/postgresql
+      - -c
+      - log_filename=postgresql-%Y-%m-%d_%H%M%S.log
+      
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openchat -d openchat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      
+    labels:
+      - "traefik.enable=false"
+
+  # =============================================================================
+  # ELECTRIC SQL SYNC SERVICE
+  # =============================================================================
+  electric:
+    image: electricsql/electric:latest
+    container_name: openchat-electric-sync
+    restart: unless-stopped
+    depends_on:
+      postgres-electric:
+        condition: service_healthy
+        
+    environment:
+      # Database connection - using Docker secrets
+      DATABASE_URL_FILE: /run/secrets/electric_database_url
+      
+      # Electric service configuration
+      ELECTRIC_HOST: "0.0.0.0"
+      ELECTRIC_PORT: "5133"
+      
+      # Authentication - using Docker secrets for JWT
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      JWT_ISSUER: "${JWT_ISSUER:-openchat}"
+      JWT_AUDIENCE: "${JWT_AUDIENCE:-openchat-users}"
+    secrets:
+      - postgres_electric_password
+      - electric_database_url
+      - jwt_secret
+      
+      # Logging
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "json"
+      
+      # Performance settings
+      MAX_CONCURRENT_SHAPES: "50"
+      ENABLE_SHAPE_CACHING: "true"
+      SHAPE_CACHE_TTL: "5m"
+      
+      # CORS settings for web development
+      CORS_ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:3000"
+      CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+      CORS_ALLOWED_HEADERS: "Content-Type,Authorization,X-Electric-User-ID,X-Electric-Device-ID"
+      CORS_ALLOW_CREDENTIALS: "true"
+      
+      # Monitoring
+      ENABLE_METRICS: "true"
+      ENABLE_DEBUG_ENDPOINTS: "${DEVELOPMENT_MODE:-true}"
+      
+    volumes:
+      # Mount Electric configuration
+      - ./electric-config/electric.yaml:/app/config/electric.yaml:ro
+      
+      # Logs
+      - electric_logs:/var/log/electric
+      
+    ports:
+      - "5133:5133"
+      
+    networks:
+      - openchat-electric
+      
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5133/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.electric.rule=Host(`electric.localhost`)"
+      - "traefik.http.services.electric.loadbalancer.server.port=5133"
+
+  # =============================================================================
+  # REDIS FOR CACHING (OPTIONAL)
+  # =============================================================================
+  redis-electric:
+    image: redis:7-alpine
+    container_name: openchat-redis-electric
+    restart: unless-stopped
+    command: 
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+      
+    volumes:
+      - redis_electric_data:/data
+      
+    ports:
+      - "6380:6379"  # Use different port to avoid conflicts
+      
+    networks:
+      - openchat-electric
+      
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      
+    labels:
+      - "traefik.enable=false"
+
+  # =============================================================================
+  # PROMETHEUS MONITORING (OPTIONAL)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: openchat-prometheus-electric
+    restart: unless-stopped
+    profiles:
+      - monitoring
+      
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+      
+    ports:
+      - "9090:9090"
+      
+    networks:
+      - openchat-electric
+      
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  # =============================================================================
+  # GRAFANA DASHBOARDS (OPTIONAL)
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openchat-grafana-electric
+    restart: unless-stopped
+    profiles:
+      - monitoring
+      
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    secrets:
+      - grafana_admin_password
+      
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      
+    ports:
+      - "3030:3000"
+      
+    networks:
+      - openchat-electric
+      
+    depends_on:
+      - prometheus
+      
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  # =============================================================================
+  # REVERSE PROXY (OPTIONAL)
+  # =============================================================================
+  traefik:
+    image: traefik:latest
+    container_name: openchat-traefik-electric
+    restart: unless-stopped
+    profiles:
+      - proxy
+      
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+      
+    networks:
+      - openchat-electric
+      
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+
+  # =============================================================================
+  # LOG AGGREGATION (OPTIONAL)
+  # =============================================================================
+  loki:
+    image: grafana/loki:latest
+    container_name: openchat-loki-electric
+    restart: unless-stopped
+    profiles:
+      - logging
+      
+    command: -config.file=/etc/loki/local-config.yaml
+    
+    volumes:
+      - loki_data:/tmp/loki
+      
+    ports:
+      - "3100:3100"
+      
+    networks:
+      - openchat-electric
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: openchat-promtail-electric
+    restart: unless-stopped
+    profiles:
+      - logging
+      
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - electric_logs:/var/log/electric:ro
+      - postgres_electric_logs:/var/log/postgresql:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      
+    networks:
+      - openchat-electric
+      
+    depends_on:
+      - loki
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  openchat-electric:
+    driver: bridge
+    name: openchat-electric-network
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  # Database volumes
+  postgres_electric_data:
+    name: openchat_postgres_electric_data
+  postgres_electric_logs:
+    name: openchat_postgres_electric_logs
+  postgres_electric_archive:
+    name: openchat_postgres_electric_archive
+    
+  # Cache volumes
+  redis_electric_data:
+    name: openchat_redis_electric_data
+    
+  # Electric service volumes
+  electric_logs:
+    name: openchat_electric_logs
+    
+  # Monitoring volumes
+  prometheus_data:
+    name: openchat_prometheus_data
+  grafana_data:
+    name: openchat_grafana_data
+  loki_data:
+    name: openchat_loki_data
+
+# =============================================================================
+# DOCKER SECRETS FOR SECURE CREDENTIAL MANAGEMENT
+# =============================================================================
+# SECURITY: These are development secrets. Use external secrets in production.
+secrets:
+  postgres_electric_password:
+    file: ./secrets/postgres_electric_password.txt
+  electric_database_url:
+    file: ./secrets/electric_database_url.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password.txt

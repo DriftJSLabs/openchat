@@ -1,0 +1,354 @@
+# ElectricSQL Service Configuration for OpenChat
+# This configuration defines the ElectricSQL sync service settings for real-time data synchronization
+
+# =============================================================================
+# SERVER CONFIGURATION
+# =============================================================================
+
+server:
+  # HTTP server settings
+  host: "0.0.0.0"
+  port: 5133
+  
+  # Enable CORS for web client access
+  cors:
+    enabled: true
+    origins:
+      - "http://localhost:3001"  # Web client development
+      - "http://localhost:3000"  # Alternative web client port
+      - "https://openchat.example.com"  # Production domain
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    headers:
+      - "Content-Type"
+      - "Authorization" 
+      - "X-Electric-User-ID"
+      - "X-Electric-Device-ID"
+    credentials: true
+
+  # Request timeout and limits
+  timeout: 30s
+  max_request_size: "10MB"
+  
+  # Health check endpoint
+  health_check:
+    enabled: true
+    path: "/health"
+    
+# =============================================================================
+# DATABASE CONNECTION
+# =============================================================================
+
+database:
+  # Primary PostgreSQL connection
+  url: "${DATABASE_URL:-postgresql://openchat:openchat_dev@localhost:5432/openchat}"
+  
+  # Connection pool settings
+  pool:
+    max_connections: 20
+    min_connections: 5
+    connection_timeout: 10s
+    idle_timeout: 300s
+    max_lifetime: 1800s
+  
+  # Logical replication settings
+  replication:
+    slot_name: "electric_main_slot"
+    publication_name: "electric_publication"
+    # Snapshot mode: initial, never, or force
+    snapshot_mode: "initial"
+    
+    # Replication user credentials
+    username: "${ELECTRIC_REPLICATION_USER:-electric_replication}"
+    password: "${ELECTRIC_REPLICATION_PASSWORD:-electric_replication_password}"
+    
+  # Schema and table configuration
+  schema:
+    # Default schema to use
+    default: "public"
+    
+    # Tables to include in replication (if not using publications)
+    # When using publications, this section can be omitted
+    include_tables:
+      - "user"
+      - "chat"
+      - "message"
+      - "user_preferences"
+      - "chat_analytics"
+      - "sync_config"
+      - "device"
+      - "ai_usage"
+
+# =============================================================================
+# AUTHENTICATION CONFIGURATION
+# =============================================================================
+
+auth:
+  # Authentication mode: none, jwt, or custom
+  mode: "jwt"
+  
+  # JWT configuration
+  jwt:
+    # JWT secret key (use environment variable in production)
+    secret: "${JWT_SECRET:-your-jwt-secret-key}"
+    
+    # Token validation settings
+    issuer: "${JWT_ISSUER:-openchat}"
+    audience: "${JWT_AUDIENCE:-openchat-users}"
+    
+    # Token expiration (for issued tokens)
+    expires_in: "24h"
+    
+    # Claims mapping
+    claims:
+      user_id: "sub"  # Map 'sub' claim to user_id
+      email: "email"
+      name: "name"
+  
+  # Custom authentication handler (if mode is 'custom')
+  custom:
+    # URL to validate authentication tokens
+    validation_url: "${AUTH_VALIDATION_URL}"
+    # Headers to forward to validation service
+    forward_headers:
+      - "Authorization"
+      - "X-User-Context"
+
+# =============================================================================
+# SYNC CONFIGURATION
+# =============================================================================
+
+sync:
+  # Shape streaming configuration
+  shapes:
+    # Maximum number of concurrent shape subscriptions per client
+    max_concurrent_shapes: 50
+    
+    # Shape data retention settings
+    retention:
+      # How long to keep shape data in memory (for reconnection)
+      memory_retention: "1h"
+      # How long to keep shape snapshots on disk
+      disk_retention: "24h"
+    
+    # Shape optimization settings
+    optimization:
+      # Enable shape result caching
+      enable_caching: true
+      # Cache TTL for shape results
+      cache_ttl: "5m"
+      # Maximum cache size per shape
+      max_cache_size: "100MB"
+  
+  # Batch processing configuration
+  batch:
+    # Maximum batch size for bulk operations
+    max_batch_size: 1000
+    # Batch processing timeout
+    timeout: "10s"
+    # Enable batch compression
+    compression: true
+  
+  # Change stream configuration
+  changes:
+    # Buffer size for change events
+    buffer_size: 10000
+    # Flush interval for batched changes
+    flush_interval: "100ms"
+    # Maximum change event age before forced flush
+    max_age: "1s"
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+logging:
+  # Log level: debug, info, warn, error
+  level: "${LOG_LEVEL:-info}"
+  
+  # Log format: json, text
+  format: "json"
+  
+  # Output destinations
+  outputs:
+    - type: "console"
+      enabled: true
+    - type: "file"
+      enabled: true
+      path: "/var/log/electric/electric.log"
+      max_size: "100MB"
+      max_backups: 5
+      max_age: "7d"
+  
+  # Component-specific logging levels
+  components:
+    replication: "debug"  # Detailed replication logging
+    auth: "info"
+    shapes: "info"
+    http: "warn"
+    database: "info"
+
+# =============================================================================
+# METRICS AND MONITORING
+# =============================================================================
+
+metrics:
+  # Enable Prometheus metrics
+  prometheus:
+    enabled: true
+    path: "/metrics"
+    
+  # Custom metrics configuration
+  custom_metrics:
+    # Track shape subscription metrics
+    shapes:
+      - active_subscriptions
+      - subscription_duration
+      - data_transfer_bytes
+    
+    # Track replication metrics  
+    replication:
+      - lag_seconds
+      - events_processed
+      - errors_count
+    
+    # Track authentication metrics
+    auth:
+      - token_validations
+      - auth_failures
+      - active_sessions
+
+# =============================================================================
+# PERFORMANCE TUNING
+# =============================================================================
+
+performance:
+  # Memory management
+  memory:
+    # Maximum memory usage for shape caching
+    max_shape_cache: "512MB"
+    # Garbage collection settings
+    gc_interval: "5m"
+  
+  # Network settings
+  network:
+    # TCP keep-alive settings
+    keepalive: true
+    keepalive_interval: "30s"
+    
+    # Connection limits
+    max_connections_per_ip: 100
+    
+    # Rate limiting
+    rate_limit:
+      enabled: true
+      requests_per_second: 1000
+      burst_size: 5000
+  
+  # Database query optimization
+  database:
+    # Query timeout
+    query_timeout: "30s"
+    # Enable query result caching
+    query_cache: true
+    # Maximum connections per user
+    max_connections_per_user: 10
+
+# =============================================================================
+# DEVELOPMENT AND DEBUGGING
+# =============================================================================
+
+development:
+  # Enable development mode (more verbose logging, etc.)
+  enabled: "${DEVELOPMENT_MODE:-false}"
+  
+  # Hot reload configuration
+  hot_reload:
+    enabled: true
+    watch_paths:
+      - "/app/config"
+    
+  # Debug endpoints
+  debug_endpoints:
+    enabled: true
+    endpoints:
+      - "/debug/shapes"
+      - "/debug/replication"
+      - "/debug/connections"
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+
+security:
+  # TLS configuration
+  tls:
+    enabled: "${TLS_ENABLED:-false}"
+    cert_file: "${TLS_CERT_FILE}"
+    key_file: "${TLS_KEY_FILE}"
+    
+  # Request validation
+  validation:
+    # Maximum request size
+    max_request_size: "10MB"
+    # Request timeout
+    timeout: "30s"
+    
+  # IP filtering
+  ip_filter:
+    enabled: false
+    allowed_ips: []
+    blocked_ips: []
+
+# =============================================================================
+# ERROR HANDLING
+# =============================================================================
+
+error_handling:
+  # Retry configuration for failed operations
+  retry:
+    max_attempts: 3
+    initial_delay: "1s"
+    max_delay: "30s"
+    backoff_multiplier: 2.0
+  
+  # Circuit breaker configuration
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    success_threshold: 3
+    timeout: "30s"
+  
+  # Error recovery strategies
+  recovery:
+    # Auto-restart on critical errors
+    auto_restart: true
+    # Maximum restart attempts
+    max_restarts: 5
+    # Restart cooldown period
+    restart_cooldown: "1m"
+
+# =============================================================================
+# FEATURE FLAGS
+# =============================================================================
+
+features:
+  # Enable experimental features
+  experimental:
+    # Enhanced shape filtering
+    advanced_shapes: false
+    # Compressed change streams
+    compressed_streams: false
+    # Real-time analytics
+    realtime_analytics: true
+  
+  # Beta features
+  beta:
+    # Multi-tenant isolation
+    tenant_isolation: true
+    # Advanced caching
+    smart_caching: true
