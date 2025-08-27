@@ -3,6 +3,8 @@
 import { cn } from '@/lib/utils';
 import type { ComponentProps, HTMLAttributes } from 'react';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useInfiniteMessages } from '@/hooks/queries/use-messages-infinite';
+import { useRealtimeSubscriptions } from '@/hooks/use-realtime-subscriptions';
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -111,7 +113,7 @@ export function MessageList({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
   
-  const userScrollTimeoutRef = useRef<NodeJS.Timeout>();
+  const userScrollTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   /**
    * Initialize virtualization manager if needed

@@ -37,9 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { offlineManager } from '@/lib/offline-manager';
-import { errorHandler } from '@/lib/error-handling';
-import { conflictResolution } from '@/lib/conflict-resolution';
+import { useSyncData } from '@/hooks/queries/use-sync-status';
 import { cn } from '@/lib/utils';
 
 import type {

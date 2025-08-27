@@ -31,12 +31,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     
     if (savedData.theme && validThemes.includes(savedData.theme)) {
       const savedTheme = savedData.theme as Theme
-      setThemeState(savedTheme)
+      if (savedTheme !== theme) {
+        setThemeState(savedTheme)
+      }
       document.documentElement.setAttribute("data-theme", savedTheme)
     } else {
       document.documentElement.setAttribute("data-theme", "purple")
     }
-  }, [])
+  }, []) // Empty dependency array - only run once on mount
 
   const setTheme = React.useCallback((newTheme: Theme) => {
     setThemeState(newTheme)

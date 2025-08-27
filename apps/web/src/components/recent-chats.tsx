@@ -7,7 +7,6 @@
 
 'use client';
 
-import { useState } from 'react';
 import { MessageSquare, Clock, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -38,18 +37,17 @@ export function RecentChats({
   limit = 8,
   showEmpty = true,
 }: RecentChatsProps) {
-  const [conversations, setConversations] = useState(mockConversations);
+  // For now, show empty state until real chat loading is implemented
+  const conversations: Conversation[] = [];
 
   const handleArchive = (id: string) => {
-    setConversations(prev =>
-      prev.map(conv =>
-        conv.id === id ? { ...conv, isArchived: true } : conv
-      )
-    );
+    console.log('Archive chat:', id);
+    // TODO: Implement real archive functionality
   };
 
   const handleDelete = (id: string) => {
-    setConversations(prev => prev.filter(conv => conv.id !== id));
+    console.log('Delete chat:', id);
+    // TODO: Implement real delete functionality
   };
 
   const activeConversations = conversations
@@ -199,9 +197,7 @@ function EmptyRecentChats() {
  * Simplified version for use in the app sidebar
  */
 export function RecentChatsList({ className }: { className?: string }) {
-  const recentChats = mockConversations
-    .filter(conv => !conv.isArchived)
-    .slice(0, 5);
+  const recentChats: Conversation[] = [];
 
   if (recentChats.length === 0) {
     return (

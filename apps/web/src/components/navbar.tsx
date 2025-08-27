@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Logo from "@/components/logo"
-import LoginModal from "@/components/login-modal"
+import UserMenu from "@/components/user-menu"
 
 
 export default function Navbar() {
@@ -18,7 +18,7 @@ export default function Navbar() {
         </div>
         {/* Right side */}
         <div className="flex flex-1 items-center justify-end gap-2">
-          <LoginModal />
+          <UserMenu />
         </div>
       </div>
     </header>

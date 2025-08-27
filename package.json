@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "check": "oxlint",
-    "dev": "bun scripts/generate-dev-env.ts && cd apps/server && bun --hot src/dev.ts",
+    "dev": "turbo dev",
     "build": "turbo build",
     "build:prod": "turbo build:prod",
     "test": "turbo test",

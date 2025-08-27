@@ -58,7 +58,7 @@ export const conversation = pgTable("conversation", {
  * Handles permissions, roles, and participant-specific settings
  */
 export const conversationParticipant = pgTable("conversation_participant", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: uuid("id").defaultRandom(),
   
   // Core relationship
   conversationId: uuid("conversation_id")
@@ -279,7 +279,7 @@ export const attachment = pgTable("attachment", {
  * User relationships table - handles friendships, blocks, and social connections
  */
 export const userRelationship = pgTable("user_relationship", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: uuid("id").defaultRandom(),
   
   // Core relationship
   fromUserId: uuid("from_user_id")
@@ -329,7 +329,7 @@ export const userRelationship = pgTable("user_relationship", {
 export const chat = pgTable("chat", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   // Enhanced chat fields
@@ -352,7 +352,7 @@ export const syncEvent = pgTable("sync_event", {
   operation: text("operation", { enum: ["create", "update", "delete", "batch_create", "batch_update"] }).notNull(),
   data: text("data"), // JSON stringified data
   timestamp: timestamp("timestamp").notNull().defaultNow(),
-  userId: text("user_id").notNull(),
+  userId: uuid("user_id").notNull(),
   deviceId: text("device_id").notNull(),
   synced: boolean("synced").default(false),
   // Enhanced sync tracking
@@ -364,7 +364,7 @@ export const syncEvent = pgTable("sync_event", {
 
 export const device = pgTable("device", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   fingerprint: text("fingerprint").notNull().unique(),
@@ -374,7 +374,7 @@ export const device = pgTable("device", {
 
 export const syncConfig = pgTable("sync_config", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   mode: text("mode", { enum: ["local-only", "cloud-only", "hybrid"] }).notNull().default("hybrid"),
@@ -386,7 +386,7 @@ export const syncConfig = pgTable("sync_config", {
 // Chat analytics table for tracking usage patterns and performance metrics
 export const chatAnalytics = pgTable("chat_analytics", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   chatId: uuid("chat_id")
@@ -413,7 +413,7 @@ export const chatAnalytics = pgTable("chat_analytics", {
 // User preferences table for storing user-specific settings and preferences
 export const userPreferences = pgTable("user_preferences", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   // UI/UX preferences
@@ -447,7 +447,7 @@ export const userPreferences = pgTable("user_preferences", {
 // AI usage tracking table for monitoring AI model usage, costs, and performance
 export const aiUsage = pgTable("ai_usage", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
+  userId: uuid("user_id")
     .notNull()
     .references(() => user.id),
   chatId: uuid("chat_id")

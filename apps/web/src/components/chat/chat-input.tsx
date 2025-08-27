@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import type { ComponentProps, HTMLAttributes } from 'react';
 import { useCallback, useState, useRef, useEffect } from 'react';
+import { useDraftAutoSave } from '@/hooks/mutations/use-draft-mutations';
 import {
   PromptInput,
   PromptInputTextarea,
@@ -35,7 +36,9 @@ import {
 /**
  * Props for the ChatInput component
  */
-export interface ChatInputProps extends Omit<PromptInputProps, 'onSubmit'> {
+export interface ChatInputProps {
+  /** CSS class name */
+  className?: string;
   /** Current input value */
   value?: string;
   /** Handler for input value changes */
@@ -152,57 +155,51 @@ export function ChatInput({
   } = useChatContainer();
   
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [charCount, setCharCount] = useState(value.length);
+  const [charCount, setCharCount] = useState(value?.length || 0);
+  
+  // Draft auto-save mutation - replaces useEffect patterns
+  const draftAutoSave = useDraftAutoSave(
+    autoSave?.key || 'default', 
+    {
+      debounceMs: autoSave?.interval || 1000,
+      enabled: autoSave?.enabled || false,
+    }
+  );
   const [isDragActive, setIsDragActive] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>();
+  const typingTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Update character count when value changes
   useEffect(() => {
     setCharCount(value.length);
   }, [value]);
 
-  // Auto-save draft functionality
+  // Auto-save when value changes using mutation (replaces useEffect)
   useEffect(() => {
-    if (!autoSave?.enabled || !autoSave.key || !value) return;
-
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
+    if (value && autoSave?.enabled) {
+      draftAutoSave.debouncedSave(value);
     }
+  }, [value, autoSave?.enabled, draftAutoSave.debouncedSave]);
 
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      localStorage.setItem(`chat-draft-${autoSave.key}`, value);
-    }, autoSave.interval || 1000);
-
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [value, autoSave]);
-
-  // Load saved draft on mount
+  // Load saved draft on mount using mutation
   useEffect(() => {
     if (autoSave?.enabled && autoSave.key && !value) {
-      const savedDraft = localStorage.getItem(`chat-draft-${autoSave.key}`);
-      if (savedDraft) {
-        onChange?.(savedDraft);
-      }
+      draftAutoSave.loadDraft().then((savedDraft) => {
+        if (savedDraft) {
+          onChange?.(savedDraft);
+        }
+      }).catch(console.error);
     }
-  }, [autoSave, onChange, value]);
+  }, [autoSave?.enabled, autoSave?.key, value, onChange, draftAutoSave.loadDraft]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
-      }
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
       }
     };
   }, []);

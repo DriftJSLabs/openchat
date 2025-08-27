@@ -139,7 +139,7 @@ export async function getOrCreateDevUser() {
 
     // Create dev user if it doesn't exist
     logger.info('Creating new development user');
-    const newUserId = nanoid();
+    const newUserId = crypto.randomUUID();
     const newUser = {
       id: newUserId,
       name: DEV_USER.name,

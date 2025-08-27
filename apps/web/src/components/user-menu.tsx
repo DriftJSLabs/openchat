@@ -10,7 +10,7 @@ import { authClient } from "@/lib/auth-client";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import LoginModal from "./login-modal";
 
 export default function UserMenu() {
   const router = useRouter();
@@ -21,11 +21,7 @@ export default function UserMenu() {
   }
 
   if (!session) {
-    return (
-      <Button variant="outline" asChild>
-        <Link href="/login">Sign In</Link>
-      </Button>
-    );
+    return <LoginModal triggerText="Sign In" />;
   }
 
   return (

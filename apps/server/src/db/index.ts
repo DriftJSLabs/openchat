@@ -73,7 +73,7 @@ const pool = new Pool(poolConfig);
 // Pool event handlers for better debugging
 pool.on('connect', (client) => {
   logger.info('Database pool: New client connected');
-  client.query('SET application_name = $1', ['openchat-server']);
+  client.query("SET application_name = 'openchat-server'");
 });
 
 pool.on('acquire', () => {
@@ -122,10 +122,13 @@ async function testConnection(): Promise<void> {
   }
 }
 
-// Initialize connection test
-testConnection().catch(err => {
-  logger.error('Failed to establish initial database connection:', err);
-});
+// Initialize connection test asynchronously (don't block server startup)
+if (process.env.SKIP_DB_CONNECTION !== 'true') {
+  testConnection().catch(err => {
+    logger.error('Failed to establish initial database connection:', err);
+    logger.info('💡 Server will continue running - database will be available when connection is restored');
+  });
+}
 
 /**
  * Drizzle ORM database instance with all schemas

@@ -5,7 +5,7 @@ import { authClient } from '@/lib/auth-client';
 import Providers from './providers';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
-import LoginModal from '@/components/login-modal';
+import UserMenu from '@/components/user-menu';
 import { DatabaseInitializationStatus } from './database-initialization-status';
 import { SyncStatusIndicator } from './sync-status-indicator';
 
@@ -46,7 +46,7 @@ export function AuthenticatedApp({ children, defaultSidebarOpen = false }: Authe
               <div className="flex items-center gap-2">
                 {user && <DatabaseInitializationStatus />}
                 {user && <SyncStatusIndicator userId={user.id} />}
-                <LoginModal />
+                <UserMenu />
               </div>
             </header>
             <main className="flex-1 overflow-y-auto overflow-x-hidden">

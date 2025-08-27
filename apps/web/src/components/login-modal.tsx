@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { authClient } from "@/lib/auth-client"
 
 // Check if we're in development mode
 const isDevelopment = () => {
@@ -114,12 +115,24 @@ const handleDevLogin = async (): Promise<{ success: boolean; error?: string }> =
   }
 }
 
-export default function LoginModal() {
+interface LoginModalProps {
+  triggerText?: string;
+}
+
+export default function LoginModal({ triggerText = "Log In" }: LoginModalProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [isDevLoginLoading, setIsDevLoginLoading] = useState(false)
   const [devLoginError, setDevLoginError] = useState<string | null>(null)
   const [devLoginSuccess, setDevLoginSuccess] = useState(false)
+  
+  // Session detection - don't show login button if user is already logged in
+  const { data: session, isPending } = authClient.useSession()
+  
+  // Don't render login button if user is already logged in
+  if (session) {
+    return null
+  }
 
   // Enhanced dev login handler with UI state management
   const handleDevLoginClick = async () => {
@@ -147,8 +160,8 @@ export default function LoginModal() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="text-sm">
-          Log In
+        <Button size="sm" variant="outline" className="text-sm">
+          {triggerText}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">

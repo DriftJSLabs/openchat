@@ -6,7 +6,7 @@
  * It integrates with the chat routing system and provides quick access to all features.
  */
 
-import { MessageSquare, User, Plus, History, Search, Settings, Archive } from "lucide-react"
+import { MessageSquare, User, History, Search, Settings, Archive } from "lucide-react"
 import Link from "next/link"
 import { Suspense } from "react"
 
@@ -22,21 +22,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import Logo from "@/components/logo"
 import { RecentChatsList } from "@/components/recent-chats"
+import { NewChatButton } from "@/components/new-chat-button"
 
 /**
  * Primary navigation items for chat functionality
  */
 const primaryChatItems = [
-  {
-    title: "New Chat",
-    url: "/",
-    icon: Plus,
-    description: "Start a new AI conversation",
-  },
   {
     title: "All Chats",
     url: "/chat",
@@ -101,6 +94,19 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* New Chat Button */}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NewChatButton 
+                    variant="ghost" 
+                    className="w-full justify-start gap-3 font-medium h-10 px-2"
+                  >
+                    New Chat
+                  </NewChatButton>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              
+              {/* Other primary items */}
               {primaryChatItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
