@@ -9,6 +9,7 @@ import { ModelSwitcher } from "@/components/model-switcher";
 import { OpenRouterConnect } from "@/components/auth/openrouter-connect";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { cn } from "@/lib/utils";
+import { SecureLogger } from "@/lib/secure-logger";
 import type { Id } from "server/convex/_generated/dataModel";
 
 interface ChatPageClientProps {
@@ -17,13 +18,17 @@ interface ChatPageClientProps {
 
 export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   // Load saved model from localStorage or use default
-  const [selectedModel, setSelectedModel] = useState(() => {
+  const [selectedModel, setSelectedModel] = useState("openai/gpt-4o");
+
+  // Initialize model selection from localStorage after mount
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedModel = localStorage.getItem('selectedModel');
-      return savedModel || "openai/gpt-4o";
+      if (savedModel) {
+        setSelectedModel(savedModel);
+      }
     }
-    return "openai/gpt-4o";
-  });
+  }, []);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -82,10 +87,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       });
 
       // Send to direct OpenRouter API
-      console.log('🚀 Sending to direct OpenRouter API:', { 
+      SecureLogger.log('Sending to OpenRouter API:', { 
         model: selectedModel, 
-        messagesCount: messages?.length || 0,
-        userMessage: message.substring(0, 50) + '...'
+        messagesCount: messages?.length || 0
       });
       
       const response = await fetch('/api/chat', {

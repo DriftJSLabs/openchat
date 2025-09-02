@@ -2,6 +2,9 @@ import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
 import { NextRequest } from 'next/server';
+import { CSRFProtection } from '@/lib/csrf';
+import { chatRateLimit } from '@/lib/rate-limit';
+import { SecureLogger } from '@/lib/secure-logger';
 
 export const runtime = 'edge';
 
@@ -25,6 +28,18 @@ const streamStorage = new Map<string, {
 
 export async function POST(req: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitResult = chatRateLimit(req);
+    if (rateLimitResult) {
+      return rateLimitResult;
+    }
+
+    // Apply CSRF protection
+    const csrfResult = CSRFProtection.middleware(req);
+    if (csrfResult) {
+      return csrfResult;
+    }
+
     const { 
       messages, 
       model, 
@@ -62,7 +77,7 @@ export async function POST(req: NextRequest) {
     const selectedModel = models[model as keyof typeof models];
     
     if (!selectedModel) {
-      console.log('Model not found in AI SDK, falling back to OpenRouter');
+      SecureLogger.log('Model not found in AI SDK, falling back to OpenRouter');
       
       if (!token) {
         return new Response(JSON.stringify({ error: 'OpenRouter token required for this model' }), { 
@@ -123,7 +138,7 @@ export async function POST(req: NextRequest) {
       } catch (error: any) {
         if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
           // Client aborted the request, return a clean response
-          console.log('OpenRouter request aborted by client');
+          SecureLogger.log('OpenRouter request aborted by client');
           return new Response(null, { status: 499 }); // Client Closed Request
         }
         throw error;
@@ -243,7 +258,7 @@ export async function POST(req: NextRequest) {
                       })}\n\n`));
                     }
                   } catch (e) {
-                    console.error('Parse error:', e);
+                    SecureLogger.error('Parse error:', e);
                   }
                 }
               }
@@ -383,12 +398,12 @@ export async function POST(req: NextRequest) {
                   timestamp: Date.now()
                 });
               }
-              console.log(`Stream aborted after generating ${fullText.length} characters`);
+              SecureLogger.log(`Stream aborted after generating ${fullText.length} characters`);
             },
           });
         } catch (error: any) {
           if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
-            console.log('AI SDK request aborted by client');
+            SecureLogger.log('AI SDK request aborted by client');
             return new Response(null, { status: 499 });
           }
           throw error;
@@ -477,7 +492,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error in chat API:', error);
+    SecureLogger.error('Error in chat API:', error);
     return new Response(JSON.stringify({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Copy, Check, FileText } from "lucide-react";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import hljs from "highlight.js/lib/core";
 import { cn } from "@/lib/utils";
+import { SecureLogger } from "@/lib/secure-logger";
 
 // Import specific languages for better performance
 import javascript from "highlight.js/lib/languages/javascript";
@@ -138,19 +139,19 @@ const detectLanguage = (code: string, className?: string): string => {
   return 'plaintext';
 };
 
-export function MessageContent({ content, isStreaming = false }: MessageContentProps) {
+export const MessageContent = React.memo(function MessageContent({ content, isStreaming = false }: MessageContentProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const copyToClipboard = async (text: string, id: string) => {
+  const copyToClipboard = useCallback(async (text: string, id: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedCode(id);
       // Reset after 2 seconds
       setTimeout(() => setCopiedCode(null), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      SecureLogger.error('Failed to copy:', err);
     }
-  };
+  }, []);
 
   return (
     <div className="message-content">
@@ -389,4 +390,4 @@ export function MessageContent({ content, isStreaming = false }: MessageContentP
       )}
     </div>
   );
-}
+});
