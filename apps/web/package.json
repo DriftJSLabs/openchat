@@ -5,7 +5,10 @@
 	"scripts": {
 		"dev": "next dev --port=3001",
 		"build": "next build",
-		"start": "next start"
+		"start": "next start",
+		"test": "vitest",
+		"test:run": "vitest run",
+		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^2.0.9",
@@ -51,10 +54,16 @@
 		"@types/node": "^20",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
+		"@testing-library/jest-dom": "^6.1.6",
+		"@testing-library/react": "^14.1.2",
+		"@testing-library/user-event": "^14.5.1",
+		"@vitejs/plugin-react": "^4.2.1",
 		"autoprefixer": "^10.4.21",
+		"jsdom": "^23.0.1",
 		"postcss": "^8.5.6",
 		"postcss-cli": "^11.0.1",
 		"tailwindcss": "^3",
-		"typescript": "^5"
+		"typescript": "^5",
+		"vitest": "^1.1.0"
 	}
 }

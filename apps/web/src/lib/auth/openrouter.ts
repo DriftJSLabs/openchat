@@ -93,12 +93,31 @@ export async function exchangeCodeForToken(
 }
 
 // Secure token storage using encryption
-const ENCRYPTION_KEY = 'openrouter-token-key';
+// Generate or retrieve encryption key from environment or create session-based key
+function getEncryptionKey(): string {
+  // Check for environment variable first
+  if (typeof window === 'undefined') {
+    // Server-side: use environment variable
+    return process.env.OPENROUTER_ENCRYPTION_KEY || 'fallback-key-server';
+  }
+  
+  // Client-side: Generate a session-based key that persists during the session
+  let key = sessionStorage.getItem('encryption-session-key');
+  if (!key) {
+    // Generate a proper random key
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    key = btoa(String.fromCharCode(...array));
+    sessionStorage.setItem('encryption-session-key', key);
+  }
+  return key;
+}
+
 const STORAGE_KEY = 'openrouter-token';
 const PKCE_STORAGE_KEY = 'openrouter-pkce-state';
 
 export function storeToken(token: string): void {
-  const encrypted = CryptoJS.AES.encrypt(token, ENCRYPTION_KEY).toString();
+  const encrypted = CryptoJS.AES.encrypt(token, getEncryptionKey()).toString();
   localStorage.setItem(STORAGE_KEY, encrypted);
 }
 
@@ -107,7 +126,7 @@ export function getStoredToken(): string | null {
   if (!encrypted) return null;
 
   try {
-    const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+    const bytes = CryptoJS.AES.decrypt(encrypted, getEncryptionKey());
     return bytes.toString(CryptoJS.enc.Utf8);
   } catch {
     return null;
@@ -119,7 +138,7 @@ export function removeToken(): void {
 }
 
 export function storePKCEState(state: PKCEState): void {
-  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(state), ENCRYPTION_KEY).toString();
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(state), getEncryptionKey()).toString();
   sessionStorage.setItem(PKCE_STORAGE_KEY, encrypted);
 }
 
@@ -128,7 +147,7 @@ export function getPKCEState(): PKCEState | null {
   if (!encrypted) return null;
 
   try {
-    const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+    const bytes = CryptoJS.AES.decrypt(encrypted, getEncryptionKey());
     const decrypted = bytes.toString(CryptoJS.enc.Utf8);
     return JSON.parse(decrypted);
   } catch {

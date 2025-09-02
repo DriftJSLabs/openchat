@@ -58,17 +58,20 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [chat?.title]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRetry = async () => {
     if (!input.trim() || isLoading) return;
+    setError(null);
+    await submitMessage(input.trim());
+  };
+
+  const submitMessage = async (message: string) => {
+    if (!message.trim() || isLoading) return;
 
     // Check if OpenRouter is connected
     if (!isConnected || !token) {
       setError("Please connect your OpenRouter account to use AI features");
       return;
     }
-
-    const message = input.trim();
     setInput("");
     setIsLoading(true);
     setError(null);
@@ -231,6 +234,11 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitMessage(input.trim());
+  };
+
   if (!chat) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -345,10 +353,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setError(null);
-                    handleSubmit({ preventDefault: () => {} } as React.FormEvent);
-                  }}
+                  onClick={handleRetry}
                   className="text-xs h-7 px-2 border-destructive/30 hover:border-destructive/50 text-destructive hover:text-destructive"
                 >
                   Retry

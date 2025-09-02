@@ -2,6 +2,9 @@ import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
 import { NextRequest } from 'next/server';
+import { storeStreamData, getStreamData } from '@/lib/stream-storage';
+import { validateChatRequest, checkRateLimit, getClientId } from '@/lib/validation';
+import { monitoring, getRequestContext } from '@/lib/monitoring';
 
 export const runtime = 'edge';
 
@@ -14,32 +17,44 @@ const models = {
   'anthropic/claude-3-opus': anthropic('claude-3-opus-20240229'),
 };
 
-// Memory-based storage for demo (use Redis/KV in production)
-const streamStorage = new Map<string, {
-  messages: any[];
-  model: string;
-  partialResponse: string;
-  timestamp: number;
-  token?: string;
-}>();
-
 export async function POST(req: NextRequest) {
   try {
-    const { 
-      messages, 
-      model, 
-      token, 
-      streamId,
-      resume = false,
-      partialContent
-    } = await req.json();
-    
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: 'Messages array required' }), {
+    // Rate limiting
+    const clientId = getClientId(req);
+    if (!checkRateLimit(clientId, 30, 60000)) { // 30 requests per minute
+      monitoring.logRateLimitViolation(clientId, '/api/chat');
+      return new Response(JSON.stringify({ 
+        error: 'Too many requests. Please wait a moment before trying again.' 
+      }), {
+        status: 429,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Retry-After': '60'
+        }
+      });
+    }
+
+    // Parse and validate request body
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (error) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
+    
+    const validation = validateChatRequest(requestBody);
+    if (!validation.valid) {
+      monitoring.logValidationFailure('/api/chat', validation.error!, requestBody);
+      return new Response(JSON.stringify({ error: validation.error }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { messages, model, token, streamId, resume, partialContent } = validation.data!;
 
     // Generate or use provided stream ID
     const id = streamId || crypto.randomUUID();
@@ -51,8 +66,8 @@ export async function POST(req: NextRequest) {
       if (partialContent) {
         previousContent = partialContent;
       } else if (streamId) {
-        // Fallback to server storage
-        const stored = streamStorage.get(streamId);
+        // Fallback to persistent storage
+        const stored = await getStreamData(streamId);
         if (stored) {
           previousContent = stored.partialResponse || '';
         }
@@ -152,12 +167,12 @@ export async function POST(req: NextRequest) {
           let isClosed = false;
           
           // Handle abort signal
-          const abortHandler = () => {
+          const abortHandler = async () => {
             isClosed = true;
             reader.cancel();
             // Store partial response when aborted
             if (fullResponse) {
-              streamStorage.set(id, {
+              await storeStreamData(id, {
                 messages,
                 model,
                 partialResponse: fullResponse,
@@ -183,7 +198,7 @@ export async function POST(req: NextRequest) {
               const { done, value } = await reader.read();
               if (done) {
                 // Store the complete response when stream ends naturally
-                streamStorage.set(id, {
+                await storeStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullResponse,
@@ -213,7 +228,7 @@ export async function POST(req: NextRequest) {
                   const data = line.slice(6).trim();
                   if (data === '[DONE]') {
                     // Store the complete response
-                    streamStorage.set(id, {
+                    await storeStreamData(id, {
                       messages,
                       model,
                       partialResponse: fullResponse,
@@ -253,7 +268,7 @@ export async function POST(req: NextRequest) {
             if (error?.name === 'AbortError' || error?.code === 'ECONNRESET') {
               // Store partial response when aborted
               if (fullResponse) {
-                streamStorage.set(id, {
+                await storeStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullResponse,
@@ -331,7 +346,7 @@ export async function POST(req: NextRequest) {
           isClosed = true;
           // Store partial response when aborted
           if (fullText) {
-            streamStorage.set(id, {
+            await storeStreamData(id, {
               messages,
               model,
               partialResponse: fullText,
@@ -376,7 +391,7 @@ export async function POST(req: NextRequest) {
             onAbort: () => {
               // Store partial response when aborted
               if (fullText) {
-                streamStorage.set(id, {
+                storeStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullText,
@@ -408,7 +423,7 @@ export async function POST(req: NextRequest) {
 
           // Store the complete response
           if (!isClosed) {
-            streamStorage.set(id, {
+            storeStreamData(id, {
               messages,
               model,
               partialResponse: fullText,
@@ -427,7 +442,7 @@ export async function POST(req: NextRequest) {
             if (error?.name === 'AbortError' || error?.code === 'ECONNRESET') {
               // Store partial response when aborted
               if (fullText) {
-                streamStorage.set(id, {
+                storeStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullText,
@@ -477,10 +492,16 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error in chat API:', error);
+    const context = getRequestContext(req);
+    monitoring.logError(error instanceof Error ? error : new Error(String(error)), {
+      ...context,
+      severity: 'high',
+      tags: { endpoint: '/api/chat' }
+    });
+    
     return new Response(JSON.stringify({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
+      // Don't expose internal error details in production
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -490,19 +511,60 @@ export async function POST(req: NextRequest) {
 
 // GET endpoint for checking stream state
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const streamId = url.searchParams.get('streamId');
-  
-  if (!streamId) {
-    return new Response('Stream ID required', { status: 400 });
-  }
+  try {
+    // Rate limiting
+    const clientId = getClientId(req);
+    if (!checkRateLimit(clientId, 60, 60000)) { // 60 requests per minute for GET
+      return new Response(JSON.stringify({ 
+        error: 'Too many requests. Please wait a moment before trying again.' 
+      }), {
+        status: 429,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Retry-After': '60'
+        }
+      });
+    }
 
-  const stored = streamStorage.get(streamId);
-  if (!stored) {
-    return new Response('Stream not found', { status: 404 });
+    const url = new URL(req.url);
+    const streamId = url.searchParams.get('streamId');
+    
+    if (!streamId) {
+      return new Response(JSON.stringify({ error: 'Stream ID required' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate UUID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(streamId)) {
+      return new Response(JSON.stringify({ error: 'Invalid stream ID format' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const stored = await getStreamData(streamId);
+    if (!stored) {
+      return new Response(JSON.stringify({ error: 'Stream not found' }), { 
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Remove sensitive information before returning
+    const { token, ...safeData } = stored;
+    
+    return new Response(JSON.stringify(safeData), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error in stream GET API:', error);
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-  
-  return new Response(JSON.stringify(stored), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
