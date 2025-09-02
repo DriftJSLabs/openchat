@@ -3,6 +3,7 @@ import { Nunito } from "next/font/google";
 import "../index.css";
 import Providers from "@/components/providers";
 import { AppLayout } from "@/components/app-layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const nunito = Nunito({ 
   subsets: ["latin"],
@@ -25,9 +26,17 @@ export default function RootLayout({
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<body className={`${nunito.className} min-h-screen bg-background antialiased`}>
-				<Providers>
-					<AppLayout>{children}</AppLayout>
-				</Providers>
+				<ErrorBoundary>
+					<Providers>
+						<ErrorBoundary>
+							<AppLayout>
+								<ErrorBoundary>
+									{children}
+								</ErrorBoundary>
+							</AppLayout>
+						</ErrorBoundary>
+					</Providers>
+				</ErrorBoundary>
 			</body>
 		</html>
 	);

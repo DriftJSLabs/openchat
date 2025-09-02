@@ -2,6 +2,9 @@ import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
 import { NextRequest } from 'next/server';
+import { withSecurity } from '@/lib/security';
+import { secureLogger } from '@/lib/secure-logger';
+import { DEFAULT_MODELS, HTTP_STATUS, ERROR_MESSAGES, API_CONFIG } from '@/lib/constants';
 
 export const runtime = 'edge';
 
@@ -23,7 +26,7 @@ const streamStorage = new Map<string, {
   token?: string;
 }>();
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const { 
       messages, 
@@ -35,8 +38,8 @@ export async function POST(req: NextRequest) {
     } = await req.json();
     
     if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: 'Messages array required' }), {
-        status: 400,
+      return new Response(JSON.stringify({ error: ERROR_MESSAGES.MESSAGES_REQUIRED }), {
+        status: HTTP_STATUS.BAD_REQUEST,
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -62,11 +65,11 @@ export async function POST(req: NextRequest) {
     const selectedModel = models[model as keyof typeof models];
     
     if (!selectedModel) {
-      console.log('Model not found in AI SDK, falling back to OpenRouter');
+      secureLogger.debug('Model not found in AI SDK, falling back to OpenRouter');
       
       if (!token) {
-        return new Response(JSON.stringify({ error: 'OpenRouter token required for this model' }), { 
-          status: 401,
+        return new Response(JSON.stringify({ error: ERROR_MESSAGES.TOKEN_REQUIRED }), { 
+          status: HTTP_STATUS.UNAUTHORIZED,
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -109,7 +112,7 @@ export async function POST(req: NextRequest) {
 
       let openRouterResponse;
       try {
-        openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        openRouterResponse = await fetch(`${API_CONFIG.OPENROUTER.BASE_URL}${API_CONFIG.OPENROUTER.ENDPOINTS.CHAT}`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -123,8 +126,8 @@ export async function POST(req: NextRequest) {
       } catch (error: any) {
         if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
           // Client aborted the request, return a clean response
-          console.log('OpenRouter request aborted by client');
-          return new Response(null, { status: 499 }); // Client Closed Request
+          secureLogger.debug('OpenRouter request aborted by client');
+          return new Response(null, { status: HTTP_STATUS.CLIENT_CLOSED_REQUEST });
         }
         throw error;
       }
@@ -243,7 +246,7 @@ export async function POST(req: NextRequest) {
                       })}\n\n`));
                     }
                   } catch (e) {
-                    console.error('Parse error:', e);
+                    secureLogger.error('Parse error:', e instanceof Error ? e.message : 'Unknown error');
                   }
                 }
               }
@@ -383,13 +386,13 @@ export async function POST(req: NextRequest) {
                   timestamp: Date.now()
                 });
               }
-              console.log(`Stream aborted after generating ${fullText.length} characters`);
+              secureLogger.debug(`Stream aborted after generating ${fullText.length} characters`);
             },
           });
         } catch (error: any) {
           if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
-            console.log('AI SDK request aborted by client');
-            return new Response(null, { status: 499 });
+            secureLogger.debug('AI SDK request aborted by client');
+            return new Response(null, { status: HTTP_STATUS.CLIENT_CLOSED_REQUEST });
           }
           throw error;
         }
@@ -477,32 +480,42 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error in chat API:', error);
+    secureLogger.error('Error in chat API:', error instanceof Error ? error.message : 'Unknown error');
     return new Response(JSON.stringify({ 
-      error: 'Internal server error',
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
       details: error instanceof Error ? error.message : 'Unknown error'
     }), {
-      status: 500,
+      status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 }
 
 // GET endpoint for checking stream state
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const url = new URL(req.url);
   const streamId = url.searchParams.get('streamId');
   
   if (!streamId) {
-    return new Response('Stream ID required', { status: 400 });
+    return new Response(ERROR_MESSAGES.STREAM_ID_REQUIRED, { status: HTTP_STATUS.BAD_REQUEST });
   }
 
   const stored = streamStorage.get(streamId);
   if (!stored) {
-    return new Response('Stream not found', { status: 404 });
+    return new Response(ERROR_MESSAGES.STREAM_NOT_FOUND, { status: HTTP_STATUS.NOT_FOUND });
   }
   
   return new Response(JSON.stringify(stored), {
     headers: { 'Content-Type': 'application/json' }
   });
 }
+
+// Apply security middleware
+export const POST = withSecurity(handlePOST, {
+  rateLimit: API_CONFIG.RATE_LIMITS.CHAT_API,
+  csrf: false // CSRF not needed for API endpoints with proper auth
+});
+
+export const GET = withSecurity(handleGET, {
+  rateLimit: API_CONFIG.RATE_LIMITS.STREAM_API,
+});

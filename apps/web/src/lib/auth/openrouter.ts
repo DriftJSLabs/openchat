@@ -1,4 +1,6 @@
 import CryptoJS from 'crypto-js';
+import { secureLogger } from '../secure-logger';
+import { API_CONFIG, STORAGE_KEYS, ERROR_MESSAGES } from '../constants';
 
 // PKCE utilities for OpenRouter OAuth
 export interface PKCEState {
@@ -53,7 +55,7 @@ export function buildOpenRouterAuthUrl(
     state: pkceParams.state,
   });
 
-  return `https://openrouter.ai/auth?${params.toString()}`;
+  return `${API_CONFIG.OPENROUTER.AUTH_URL}?${params.toString()}`;
 }
 
 // Exchange code for token
@@ -62,8 +64,8 @@ export async function exchangeCodeForToken(
   codeVerifier: string
 ): Promise<{ key: string } | null> {
   try {
-    console.log('Exchanging code for token...');
-    const response = await fetch('https://openrouter.ai/api/v1/auth/keys', {
+    secureLogger.debug('Exchanging code for token...');
+    const response = await fetch(`${API_CONFIG.OPENROUTER.BASE_URL}${API_CONFIG.OPENROUTER.ENDPOINTS.KEYS}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,30 +77,45 @@ export async function exchangeCodeForToken(
       }),
     });
 
-    console.log('Token exchange response:', response.status, response.ok);
+    secureLogger.debug('Token exchange response:', `${response.status} ${response.ok ? 'OK' : 'Failed'}`);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Token exchange error response:', errorText);
-      throw new Error(`Token exchange failed: ${response.status} - ${errorText}`);
+      secureLogger.error('Token exchange failed:', `Status ${response.status}`);
+      throw new Error(`${ERROR_MESSAGES.TOKEN_EXCHANGE_FAILED}: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log('Token exchange successful:', !!result.key);
+    secureLogger.debug('Token exchange successful');
     return result;
   } catch (error) {
-    console.error('Token exchange error:', error);
+    secureLogger.error('Token exchange error:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
 
 // Secure token storage using encryption
-const ENCRYPTION_KEY = 'openrouter-token-key';
-const STORAGE_KEY = 'openrouter-token';
-const PKCE_STORAGE_KEY = 'openrouter-pkce-state';
+// Generate a unique encryption key per browser session for better security
+const getEncryptionKey = (): string => {
+  const key = STORAGE_KEYS.ENCRYPTION_KEY;
+  let sessionKey = sessionStorage.getItem(key);
+  
+  if (!sessionKey) {
+    // Generate a cryptographically secure random key
+    const keyBuffer = new Uint8Array(32);
+    crypto.getRandomValues(keyBuffer);
+    sessionKey = btoa(String.fromCharCode(...keyBuffer));
+    sessionStorage.setItem(key, sessionKey);
+  }
+  
+  return sessionKey;
+};
+
+const STORAGE_KEY = STORAGE_KEYS.OPENROUTER_TOKEN;
+const PKCE_STORAGE_KEY = STORAGE_KEYS.PKCE_STATE;
 
 export function storeToken(token: string): void {
-  const encrypted = CryptoJS.AES.encrypt(token, ENCRYPTION_KEY).toString();
+  const encrypted = CryptoJS.AES.encrypt(token, getEncryptionKey()).toString();
   localStorage.setItem(STORAGE_KEY, encrypted);
 }
 
@@ -107,7 +124,7 @@ export function getStoredToken(): string | null {
   if (!encrypted) return null;
 
   try {
-    const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+    const bytes = CryptoJS.AES.decrypt(encrypted, getEncryptionKey());
     return bytes.toString(CryptoJS.enc.Utf8);
   } catch {
     return null;
@@ -119,7 +136,7 @@ export function removeToken(): void {
 }
 
 export function storePKCEState(state: PKCEState): void {
-  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(state), ENCRYPTION_KEY).toString();
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(state), getEncryptionKey()).toString();
   sessionStorage.setItem(PKCE_STORAGE_KEY, encrypted);
 }
 
@@ -128,7 +145,7 @@ export function getPKCEState(): PKCEState | null {
   if (!encrypted) return null;
 
   try {
-    const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+    const bytes = CryptoJS.AES.decrypt(encrypted, getEncryptionKey());
     const decrypted = bytes.toString(CryptoJS.enc.Utf8);
     return JSON.parse(decrypted);
   } catch {
@@ -143,16 +160,16 @@ export function removePKCEState(): void {
 // Test token validity
 export async function testToken(token: string): Promise<boolean> {
   try {
-    console.log('Testing OpenRouter token...');
-    const response = await fetch('https://openrouter.ai/api/v1/auth/key', {
+    secureLogger.debug('Testing OpenRouter token...');
+    const response = await fetch(`${API_CONFIG.OPENROUTER.BASE_URL}${API_CONFIG.OPENROUTER.ENDPOINTS.KEY_TEST}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
-    console.log('Token test response:', response.status, response.ok);
+    secureLogger.debug('Token test response:', `${response.status} ${response.ok ? 'Valid' : 'Invalid'}`);
     return response.ok;
   } catch (error) {
-    console.error('Token test error:', error);
+    secureLogger.error('Token test error:', error instanceof Error ? error.message : 'Unknown error');
     return false;
   }
 }
@@ -160,23 +177,22 @@ export async function testToken(token: string): Promise<boolean> {
 // Fetch available models from OpenRouter
 export async function fetchOpenRouterModels(token: string): Promise<any[]> {
   try {
-    console.log('Fetching OpenRouter models...');
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
+    secureLogger.debug('Fetching OpenRouter models...');
+    const response = await fetch(`${API_CONFIG.OPENROUTER.BASE_URL}${API_CONFIG.OPENROUTER.ENDPOINTS.MODELS}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
 
-    console.log('Models fetch response:', response.status, response.ok);
+    secureLogger.debug('Models fetch response:', `${response.status} ${response.ok ? 'OK' : 'Failed'}`);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Models fetch error:', errorText);
-      throw new Error(`Failed to fetch models: ${response.status} - ${errorText}`);
+      secureLogger.error('Models fetch failed:', `Status ${response.status}`);
+      throw new Error(`${ERROR_MESSAGES.MODELS_FETCH_FAILED}: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('Models fetched:', data.data?.length || 0);
+    secureLogger.debug('Models fetched:', `${data.data?.length || 0} models`);
     
     // Filter and sort models
     const models = (data.data || [])
@@ -195,7 +211,7 @@ export async function fetchOpenRouterModels(token: string): Promise<any[]> {
     
     return models;
   } catch (error) {
-    console.error('Error fetching models:', error);
+    secureLogger.error('Error fetching models:', error instanceof Error ? error.message : 'Unknown error');
     return [];
   }
 }

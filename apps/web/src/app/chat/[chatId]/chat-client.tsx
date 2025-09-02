@@ -9,6 +9,7 @@ import { ModelSwitcher } from "@/components/model-switcher";
 import { OpenRouterConnect } from "@/components/auth/openrouter-connect";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { cn } from "@/lib/utils";
+import { DEFAULT_MODELS, STORAGE_KEYS } from "@/lib/constants";
 import type { Id } from "server/convex/_generated/dataModel";
 
 interface ChatPageClientProps {
@@ -16,14 +17,8 @@ interface ChatPageClientProps {
 }
 
 export default function ChatPageClient({ chatId }: ChatPageClientProps) {
-  // Load saved model from localStorage or use default
-  const [selectedModel, setSelectedModel] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedModel = localStorage.getItem('selectedModel');
-      return savedModel || "openai/gpt-4o";
-    }
-    return "openai/gpt-4o";
-  });
+  // Initialize with default value, load from localStorage in useEffect
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODELS.PRIMARY);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -32,10 +27,20 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   const { isConnected, token } = useOpenRouterAuth();
   
+  // Load saved model from localStorage on mount (avoiding memory leak)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedModel = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL);
+      if (savedModel && savedModel !== selectedModel) {
+        setSelectedModel(savedModel);
+      }
+    }
+  }, []); // Only run on mount
+  
   // Save model selection to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedModel', selectedModel);
+      localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, selectedModel);
     }
   }, [selectedModel]);
   const chat = useQuery(api.chats.getChat, { chatId: chatId as Id<"chats"> });
