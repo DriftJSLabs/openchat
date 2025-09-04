@@ -63,8 +63,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [chats]);
 
-
-
   const performDelete = () => {
     if (!chatToDelete) return;
     
@@ -81,7 +79,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     
     // Fire delete in background
     deleteChat({ chatId: chatId as any }).catch(error => {
-      console.error("Failed to delete chat:", error);
       // Remove from deleted set if failed
       setDeletedChats(prev => {
         const next = new Set(prev);
@@ -104,7 +101,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       }
       
       deleteChat({ chatId }).catch(error => {
-        console.error("Failed to delete chat:", error);
         setDeletedChats(prev => {
           const next = new Set(prev);
           next.delete(chatId);
@@ -133,8 +129,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       try {
         await updateChat({ chatId, title: editTitle.trim() });
       } catch (error) {
-        console.error("Failed to update chat:", error);
-      }
+        }
     }
     
     setEditingChat(null);
@@ -159,7 +154,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       });
       router.push("/sign-in");
     } catch (error) {
-      console.error("Failed to sign out:", error);
       toast.error("Sign-out failed", {
         description: "There was an issue signing out. Please try again."
       });

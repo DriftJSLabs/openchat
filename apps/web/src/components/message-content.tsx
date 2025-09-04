@@ -148,8 +148,7 @@ export function MessageContent({ content, isStreaming = false }: MessageContentP
       // Reset after 2 seconds
       setTimeout(() => setCopiedCode(null), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+      }
   };
 
   return (

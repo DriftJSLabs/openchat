@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
   getStoredToken,
   storeToken,
@@ -73,23 +73,9 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
   const [availableModels, setAvailableModels] = useState<OpenRouterModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
-  // Check existing token on mount
-  useEffect(() => {
-    checkExistingToken();
-  }, []);
-
-  // Load models when token changes
-  useEffect(() => {
-    if (token && isConnected) {
-      refreshModels();
-    } else {
-      setAvailableModels([]);
-    }
-  }, [token, isConnected]);
-
-  const checkExistingToken = async () => {
+  const checkExistingToken = useCallback(async () => {
     setIsLoading(true);
-    const storedToken = getStoredToken();
+    const storedToken = await getStoredToken();
     
     if (storedToken) {
       const isValid = await testToken(storedToken);
@@ -105,7 +91,7 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
     }
     
     setIsLoading(false);
-  };
+  }, []);
 
   const connectOpenRouter = async () => {
     try {
@@ -113,24 +99,22 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
       const callbackUrl = `${window.location.origin}/auth/openrouter/callback`;
       
       // Store PKCE state for later verification
-      storePKCEState(pkceParams);
+      await storePKCEState(pkceParams);
       
       // Build auth URL and redirect
       const authUrl = buildOpenRouterAuthUrl(pkceParams, callbackUrl);
       window.location.href = authUrl;
     } catch (error) {
-      console.error('Error initiating OpenRouter auth:', error);
-    }
+      }
   };
 
   const handleCallback = async (code: string, state: string): Promise<boolean> => {
     try {
       // Retrieve and verify PKCE state
-      const storedPKCE = getPKCEState();
+      const storedPKCE = await getPKCEState();
       if (!storedPKCE) {
-        console.debug('No stored PKCE state found');
         // Try to recover by checking if we already have a token
-        const existingToken = getStoredToken();
+        const existingToken = await getStoredToken();
         if (existingToken && await testToken(existingToken)) {
           setToken(existingToken);
           setIsConnected(true);
@@ -140,7 +124,6 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
       }
       
       if (storedPKCE.state !== state) {
-        console.error('OAuth state mismatch:', { stored: storedPKCE.state, received: state });
         // Clean up invalid state
         removePKCEState();
         return false;
@@ -149,13 +132,12 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
       // Exchange code for token
       const result = await exchangeCodeForToken(code, storedPKCE.codeVerifier);
       if (!result || !result.key) {
-        console.error('Token exchange failed');
         removePKCEState();
         return false;
       }
 
       // Store token and update state
-      storeToken(result.key);
+      await storeToken(result.key);
       setToken(result.key);
       setIsConnected(true);
       
@@ -167,7 +149,6 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
       
       return true;
     } catch (error) {
-      console.error('Error handling OAuth callback:', error);
       removePKCEState();
       return false;
     }
@@ -181,13 +162,12 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
     setAvailableModels([]);
   };
 
-  const refreshModels = async () => {
+  const refreshModels = useCallback(async () => {
     if (!token) return;
     
     setModelsLoading(true);
     try {
       const models = await fetchOpenRouterModels(token);
-      console.log('Raw models received:', models.length);
       
       // Format ALL models with better info
       const formattedModels = models
@@ -212,15 +192,27 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
           return a.name.localeCompare(b.name);
         });
       
-      console.log('Formatted models:', formattedModels.length);
       setAvailableModels(formattedModels);
     } catch (error) {
-      console.error('Error fetching models:', error);
       setAvailableModels([]);
     } finally {
       setModelsLoading(false);
     }
-  };
+  }, [token]);
+
+  // Check existing token on mount
+  useEffect(() => {
+    checkExistingToken();
+  }, [checkExistingToken]);
+
+  // Load models when token changes
+  useEffect(() => {
+    if (token && isConnected) {
+      refreshModels();
+    } else {
+      setAvailableModels([]);
+    }
+  }, [token, isConnected, refreshModels]);
 
   const value: OpenRouterAuthContextType = {
     isConnected,

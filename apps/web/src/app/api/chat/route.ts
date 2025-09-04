@@ -2,8 +2,11 @@ import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
 import { NextRequest } from 'next/server';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { env } from '@/lib/env';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const models = {
   'openai/gpt-4o': openai('gpt-4o'),
@@ -14,21 +17,66 @@ const models = {
   'anthropic/claude-3-opus': anthropic('claude-3-opus-20240229'),
 };
 
-// Memory-based storage for demo (use Redis/KV in production)
-const streamStorage = new Map<string, {
+// File-based storage for stream data
+const storageFile = join(env.STREAM_DATA_DIR, 'streams.json');
+
+// Initialize storage directory
+mkdir(env.STREAM_DATA_DIR, { recursive: true }).catch(() => {});
+
+type StreamData = {
   messages: any[];
   model: string;
   partialResponse: string;
   timestamp: number;
   token?: string;
-}>();
+};
+
+// Helper functions for file-based storage
+async function loadStorage(): Promise<Map<string, StreamData>> {
+  try {
+    const data = await readFile(storageFile, 'utf-8');
+    const entries = JSON.parse(data);
+    return new Map(Object.entries(entries));
+  } catch {
+    return new Map();
+  }
+}
+
+async function saveStorage(storage: Map<string, StreamData>): Promise<void> {
+  try {
+    const data = Object.fromEntries(storage);
+    await writeFile(storageFile, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (error) {
+    // Silently fail if we can't write
+  }
+}
+
+async function setStreamData(id: string, data: StreamData): Promise<void> {
+  const storage = await loadStorage();
+  
+  // Clean up old entries (older than 24 hours)
+  const now = Date.now();
+  for (const [key, value] of storage) {
+    if (now - value.timestamp > 24 * 60 * 60 * 1000) {
+      storage.delete(key);
+    }
+  }
+  
+  storage.set(id, data);
+  await saveStorage(storage);
+}
+
+async function getStreamData(id: string): Promise<StreamData | undefined> {
+  const storage = await loadStorage();
+  return storage.get(id);
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { 
-      messages, 
-      model, 
-      token, 
+    const {
+      messages,
+      model,
+      token,
       streamId,
       resume = false,
       partialContent
@@ -51,19 +99,18 @@ export async function POST(req: NextRequest) {
       if (partialContent) {
         previousContent = partialContent;
       } else if (streamId) {
-        // Fallback to server storage
-        const stored = streamStorage.get(streamId);
-        if (stored) {
-          previousContent = stored.partialResponse || '';
-        }
+      // Fallback to server storage
+      const stored = await getStreamData(streamId);
+      if (stored) {
+        previousContent = stored.partialResponse || '';
+      }
       }
     }
 
     const selectedModel = models[model as keyof typeof models];
     
     if (!selectedModel) {
-      console.log('Model not found in AI SDK, falling back to OpenRouter');
-      
+
       if (!token) {
         return new Response(JSON.stringify({ error: 'OpenRouter token required for this model' }), { 
           status: 401,
@@ -114,7 +161,7 @@ export async function POST(req: NextRequest) {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+            'HTTP-Referer': env.NEXT_PUBLIC_OPENROUTER_APP_URL,
             'X-Title': 'OpenChat',
           },
           body: JSON.stringify(openRouterRequest),
@@ -123,7 +170,6 @@ export async function POST(req: NextRequest) {
       } catch (error: any) {
         if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
           // Client aborted the request, return a clean response
-          console.log('OpenRouter request aborted by client');
           return new Response(null, { status: 499 }); // Client Closed Request
         }
         throw error;
@@ -162,19 +208,11 @@ export async function POST(req: NextRequest) {
           }
         } catch (e) {
           // If parsing fails, use the default error message
-          console.log('Failed to parse OpenRouter error:', e);
-        }
+          }
         
         // Handle rate limiting specifically
         if (openRouterResponse.status === 429) {
           const retryAfter = openRouterResponse.headers.get('Retry-After');
-          
-          console.log('OpenRouter Rate Limit:', {
-            isUpstreamRateLimit,
-            errorMessage,
-            retryAfter,
-            errorText
-          });
           
           const headers: HeadersInit = { 
             'Content-Type': 'application/json'
@@ -222,13 +260,13 @@ export async function POST(req: NextRequest) {
             reader.cancel();
             // Store partial response when aborted
             if (fullResponse) {
-              streamStorage.set(id, {
+              setStreamData(id, {
                 messages,
                 model,
                 partialResponse: fullResponse,
                 timestamp: Date.now(),
                 token
-              });
+              }).catch(() => {});
             }
           };
           
@@ -248,7 +286,7 @@ export async function POST(req: NextRequest) {
               const { done, value } = await reader.read();
               if (done) {
                 // Store the complete response when stream ends naturally
-                streamStorage.set(id, {
+                await setStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullResponse,
@@ -278,7 +316,7 @@ export async function POST(req: NextRequest) {
                   const data = line.slice(6).trim();
                   if (data === '[DONE]') {
                     // Store the complete response
-                    streamStorage.set(id, {
+                    await setStreamData(id, {
                       messages,
                       model,
                       partialResponse: fullResponse,
@@ -308,8 +346,7 @@ export async function POST(req: NextRequest) {
                       })}\n\n`));
                     }
                   } catch (e) {
-                    console.error('Parse error:', e);
-                  }
+                    }
                 }
               }
             }
@@ -318,13 +355,13 @@ export async function POST(req: NextRequest) {
             if (error?.name === 'AbortError' || error?.code === 'ECONNRESET') {
               // Store partial response when aborted
               if (fullResponse) {
-                streamStorage.set(id, {
+                setStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullResponse,
                   timestamp: Date.now(),
                   token
-                });
+                }).catch(() => {});
               }
               if (!isClosed) {
                 try {
@@ -371,8 +408,8 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = model.startsWith('openai/') 
-      ? process.env.OPENAI_API_KEY 
-      : process.env.ANTHROPIC_API_KEY;
+      ? env.OPENAI_API_KEY 
+      : env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
       return new Response(JSON.stringify({ 
@@ -396,12 +433,12 @@ export async function POST(req: NextRequest) {
           isClosed = true;
           // Store partial response when aborted
           if (fullText) {
-            streamStorage.set(id, {
+            setStreamData(id, {
               messages,
               model,
               partialResponse: fullText,
               timestamp: Date.now()
-            });
+            }).catch(() => {});
           }
         };
         
@@ -432,7 +469,7 @@ export async function POST(req: NextRequest) {
 
         let result;
         try {
-          result = await streamText({
+          result = streamText({
             model: selectedModel,
             messages: requestMessages,
             temperature: 0.7,
@@ -441,19 +478,17 @@ export async function POST(req: NextRequest) {
             onAbort: () => {
               // Store partial response when aborted
               if (fullText) {
-                streamStorage.set(id, {
+                setStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullText,
                   timestamp: Date.now()
-                });
+                }).catch(() => {});
               }
-              console.log(`Stream aborted after generating ${fullText.length} characters`);
-            },
+              },
           });
         } catch (error: any) {
           if (error.name === 'AbortError' || error.code === 'ECONNRESET') {
-            console.log('AI SDK request aborted by client');
             return new Response(null, { status: 499 });
           }
           throw error;
@@ -473,7 +508,7 @@ export async function POST(req: NextRequest) {
 
           // Store the complete response
           if (!isClosed) {
-            streamStorage.set(id, {
+            await setStreamData(id, {
               messages,
               model,
               partialResponse: fullText,
@@ -492,12 +527,12 @@ export async function POST(req: NextRequest) {
             if (error?.name === 'AbortError' || error?.code === 'ECONNRESET') {
               // Store partial response when aborted
               if (fullText) {
-                streamStorage.set(id, {
+                setStreamData(id, {
                   messages,
                   model,
                   partialResponse: fullText,
                   timestamp: Date.now()
-                });
+                }).catch(() => {});
               }
               if (!isClosed) {
                 try {
@@ -542,7 +577,6 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error in chat API:', error);
     return new Response(JSON.stringify({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -562,7 +596,7 @@ export async function GET(req: NextRequest) {
     return new Response('Stream ID required', { status: 400 });
   }
 
-  const stored = streamStorage.get(streamId);
+  const stored = await getStreamData(streamId);
   if (!stored) {
     return new Response('Stream not found', { status: 404 });
   }

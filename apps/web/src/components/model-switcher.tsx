@@ -37,8 +37,6 @@ function formatPrice(price?: string) {
   return `$${num.toFixed(3)}`;
 }
 
-
-
 export function ModelSwitcher({ selectedModel, onModelChange, compact = false }: ModelSwitcherProps) {
   const { isConnected, availableModels, modelsLoading } = useOpenRouterAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,7 +86,6 @@ export function ModelSwitcher({ selectedModel, onModelChange, compact = false }:
   };
 
   const handleModelSelect = (modelId: string) => {
-    console.log('Model selected:', modelId);
     onModelChange(modelId);
     setSearchQuery(""); // Clear search when model is selected
   };

@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
+import { env } from '@/lib/env';
 
 // Debug endpoint to test OpenRouter API directly
 export async function POST(req: NextRequest) {
   try {
-    console.log('🐛 OpenRouter Debug API called');
     const { token, model = 'openai/gpt-3.5-turbo' } = await req.json();
     
     if (!token) {
@@ -14,16 +14,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Test basic API connectivity
-    console.log('🧪 Testing OpenRouter API connectivity...');
-    
     // First test: Get models list
     const modelsResponse = await fetch('https://openrouter.ai/api/v1/models', {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
-
-    console.log('📋 Models API response:', modelsResponse.status, modelsResponse.statusText);
 
     if (!modelsResponse.ok) {
       const errorText = await modelsResponse.text();
@@ -38,11 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const modelsData = await modelsResponse.json();
-    console.log('✅ Models loaded:', modelsData.data?.length || 0);
-
     // Second test: Simple chat completion (non-streaming)
-    console.log('🧪 Testing simple chat completion...');
-    
     const chatRequest = {
       model,
       messages: [{ role: 'user', content: 'Say "Hello from OpenRouter debug test!"' }],
@@ -55,13 +47,11 @@ export async function POST(req: NextRequest) {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+        'HTTP-Referer': env.NEXT_PUBLIC_OPENROUTER_APP_URL,
         'X-Title': 'OpenChat Debug',
       },
       body: JSON.stringify(chatRequest),
     });
-
-    console.log('💬 Chat API response:', chatResponse.status, chatResponse.statusText);
 
     if (!chatResponse.ok) {
       const errorText = await chatResponse.text();
@@ -78,16 +68,7 @@ export async function POST(req: NextRequest) {
     const chatData = await chatResponse.json();
     const responseContent = chatData.choices?.[0]?.message?.content;
     
-    console.log('✅ Chat response received:', {
-      id: chatData.id,
-      model: chatData.model,
-      usage: chatData.usage,
-      content: responseContent
-    });
-
     // Third test: Streaming test
-    console.log('🧪 Testing streaming chat completion...');
-    
     const streamRequest = {
       model,
       messages: [{ role: 'user', content: 'Count from 1 to 5, one number per message.' }],
@@ -100,7 +81,7 @@ export async function POST(req: NextRequest) {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+        'HTTP-Referer': env.NEXT_PUBLIC_OPENROUTER_APP_URL,
         'X-Title': 'OpenChat Debug',
       },
       body: JSON.stringify(streamRequest),
@@ -148,14 +129,8 @@ export async function POST(req: NextRequest) {
         }
         reader.cancel();
       } catch (e) {
-        console.error('Stream reading error:', e);
-      }
+        }
     }
-
-    console.log('✅ Streaming test completed:', {
-      chunks: chunkCount,
-      streamedContent: streamedContent.substring(0, 100)
-    });
 
     // Return debug results
     return new Response(JSON.stringify({
@@ -183,7 +158,6 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('🐛 Debug test error:', error);
     return new Response(JSON.stringify({ 
       error: 'Debug test failed',
       details: error instanceof Error ? error.message : 'Unknown error'

@@ -5,7 +5,11 @@
 	"scripts": {
 		"dev": "next dev --port=3001",
 		"build": "next build",
-		"start": "next start"
+		"start": "next start",
+		"lint": "oxlint",
+		"typecheck": "tsc --noEmit",
+		"env:generate": "node ../../scripts/generate-secrets.js",
+		"env:test": "npx tsx src/lib/env.test.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^2.0.9",

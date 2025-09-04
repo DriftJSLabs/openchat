@@ -16,36 +16,27 @@ export default function OpenRouterCallbackPage() {
 
   useEffect(() => {
     const processCallback = async () => {
-      console.log('Processing OAuth callback...');
       const code = searchParams.get('code');
       const state = searchParams.get('state');
       const errorParam = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
 
-      console.log('Callback params:', { code: !!code, state: !!state, error: errorParam });
-
       if (errorParam) {
-        console.error('OAuth error:', errorParam, errorDescription);
         setStatus('error');
         setError(`OAuth error: ${errorParam}${errorDescription ? ` - ${errorDescription}` : ''}`);
         return;
       }
 
       if (!code || !state) {
-        console.error('Missing OAuth parameters:', { code: !!code, state: !!state });
         setStatus('error');
         setError('Missing required OAuth parameters from callback');
         return;
       }
 
       try {
-        console.log('Attempting to handle callback...');
         const success = await handleCallback(code, state);
-        console.log('Callback handled:', success);
-        
         if (success) {
           setStatus('success');
-          console.log('OAuth success, redirecting...');
           // Use replace instead of push to avoid back button issues
           // And use a shorter delay
           setTimeout(() => {
@@ -56,7 +47,6 @@ export default function OpenRouterCallbackPage() {
           setError('Invalid authentication state. This can happen if you have multiple tabs open or the authentication expired. Please try again.');
         }
       } catch (err) {
-        console.error('OAuth callback error:', err);
         setStatus('error');
         setError(err instanceof Error ? err.message : 'Unknown error occurred during OAuth');
       }

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "server/convex/_generated/api";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModelSwitcher } from "@/components/model-switcher";
@@ -14,15 +14,18 @@ interface ChatPageClientProps {
   chatId: string;
 }
 
+// Get initial model from localStorage (outside component to avoid recreation)
+const getInitialModel = () => {
+  if (typeof window !== 'undefined') {
+    const savedModel = localStorage.getItem('selectedModel');
+    return savedModel || "openai/gpt-4o";
+  }
+  return "openai/gpt-4o";
+};
+
 export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   // Load saved model from localStorage or use default
-  const [selectedModel, setSelectedModel] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedModel = localStorage.getItem('selectedModel');
-      return savedModel || "openai/gpt-4o";
-    }
-    return "openai/gpt-4o";
-  });
+  const [selectedModel, setSelectedModel] = useState(getInitialModel);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -31,30 +34,33 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   const { isConnected, token } = useOpenRouterAuth();
   
-  // Save model selection to localStorage whenever it changes
-  useEffect(() => {
+  // Handle model change with localStorage update
+  const handleModelChange = useCallback((newModel: string) => {
+    setSelectedModel(newModel);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedModel', selectedModel);
+      localStorage.setItem('selectedModel', newModel);
     }
-  }, [selectedModel]);
+  }, []);
   const chat = useQuery(api.chats.getChat, { chatId: chatId as Id<"chats"> });
   const messages = useQuery(api.messages.getMessages, { chatId: chatId as Id<"chats"> });
   const sendMessage = useMutation(api.messages.sendMessage);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, scrollToBottom]);
 
   useEffect(() => {
-    if (chat?.title) {
-      document.title = `${chat.title} - OpenChat`;
-    } else {
-      document.title = "Chat - OpenChat";
-    }
+    const title = chat?.title ? `${chat.title} - OpenChat` : "Chat - OpenChat";
+    document.title = title;
+    
+    // Cleanup function to reset title when component unmounts
+    return () => {
+      document.title = "OpenChat";
+    };
   }, [chat?.title]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,8 +83,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
       // If OpenRouter is not connected, show a message to connect
       if (!isConnected || !token) {
-        console.log('🔗 OpenRouter not connected');
-        
         // Simulate AI thinking time
         await new Promise(resolve => setTimeout(resolve, 500));
         
@@ -106,12 +110,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       }
       
       // Send to direct OpenRouter API (when connected)
-      console.log('🚀 Sending to direct OpenRouter API:', { 
-        model: selectedModel, 
-        messagesCount: messages?.length || 0,
-        userMessage: message.substring(0, 50) + '...'
-      });
-      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,19 +126,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }),
       });
 
-      console.log('📡 API response status:', response.status, response.ok);
-      console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         let errorDetails = 'Unknown error';
         try {
           const errorData = await response.json();
           errorDetails = errorData.details || errorData.error || 'API request failed';
-          console.error('❌ API error data:', errorData);
-        } catch {
+          } catch {
           errorDetails = await response.text();
-          console.error('❌ API error text:', errorDetails);
-        }
+          }
         throw new Error(`OpenRouter API failed (${response.status}): ${errorDetails}`);
       }
 
@@ -153,28 +146,16 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       let chunkCount = 0;
       setStreamingContent('');
       
-      console.log('🔄 Starting to read direct text stream...');
-      
       try {
         while (true) {
           const { done, value } = await reader.read();
           
           if (done) {
-            console.log('✅ Stream completed:', {
-              chunks: chunkCount,
-              totalLength: aiContent.length,
-              preview: aiContent.substring(0, 100) + (aiContent.length > 100 ? '...' : '')
-            });
             break;
           }
           
           chunkCount++;
           const chunk = new TextDecoder().decode(value);
-          
-          console.log(`📦 Chunk ${chunkCount}:`, {
-            length: chunk.length,
-            content: chunk.length > 50 ? chunk.substring(0, 50) + '...' : chunk
-          });
           
           aiContent += chunk;
           setStreamingContent(aiContent);
@@ -183,19 +164,12 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           await new Promise(resolve => setTimeout(resolve, 15));
         }
       } catch (streamError) {
-        console.error('❌ Stream reading error:', streamError);
         throw new Error(`Failed to read AI response stream: ${streamError}`);
       }
 
       // Validate and save response
       const trimmedContent = aiContent.trim();
       if (trimmedContent) {
-        console.log('💾 Saving AI response to Convex:', {
-          length: trimmedContent.length,
-          model: selectedModel,
-          preview: trimmedContent.substring(0, 100) + (trimmedContent.length > 100 ? '...' : '')
-        });
-        
         await sendMessage({
           chatId: chatId as Id<"chats">,
           content: trimmedContent,
@@ -203,15 +177,12 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           model: selectedModel,
         });
       } else {
-        console.warn('⚠️ Empty response received from AI model');
         throw new Error('AI model returned empty response. Please try again or select a different model.');
       }
 
       setStreamingContent('');
 
     } catch (error) {
-      console.error("💥 Failed to send message:", error);
-      
       // Categorize error types for better user feedback
       let errorMessage = 'Unknown error occurred';
       let canRetry = true;
@@ -241,13 +212,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }
       }
       
-      console.log('🔍 Error categorization:', {
-        originalError: error,
-        categorizedMessage: errorMessage,
-        canRetry,
-        selectedModel
-      });
-      
       setError(errorMessage);
       setInput(message); // Restore input for retry
     } finally {
@@ -270,12 +234,12 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">{chat.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <ModelSwitcher 
-            selectedModel={selectedModel} 
-            onModelChange={setSelectedModel} 
-          />
-        </div>
+          <div className="flex items-center gap-3">
+            <ModelSwitcher 
+              selectedModel={selectedModel} 
+              onModelChange={handleModelChange} 
+            />
+          </div>
       </div>
 
       {/* Messages */}
@@ -377,7 +341,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
                 <p className="text-xs text-muted-foreground mb-2">Try switching to a different model:</p>
                 <ModelSwitcher 
                   selectedModel={selectedModel} 
-                  onModelChange={setSelectedModel} 
+                  onModelChange={handleModelChange} 
                   compact={true}
                 />
               </div>
@@ -391,7 +355,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
               <>
                 <ModelSwitcher 
                   selectedModel={selectedModel} 
-                  onModelChange={setSelectedModel} 
+                  onModelChange={handleModelChange} 
                   compact={true}
                 />
                 <div className="h-6 w-px bg-border mx-2" />

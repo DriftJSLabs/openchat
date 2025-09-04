@@ -72,7 +72,6 @@ export const updateChat = mutation({
     
     const chat = await ctx.db.get(chatId);
     if (!chat) {
-      console.warn(`Chat ${chatId} not found for update`);
       return;
     }
     
@@ -98,7 +97,6 @@ export const deleteChat = mutation({
     
     const chat = await ctx.db.get(chatId);
     if (!chat) {
-      console.warn(`Chat ${chatId} not found for deletion - may have been already deleted`);
       return;
     }
     

@@ -5,6 +5,7 @@ import "reactflow/dist/style.css";
 import "../styles/reactflow-override.css";
 import Providers from "@/components/providers";
 import { AppLayout } from "@/components/app-layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const nunito = Nunito({ 
   subsets: ["latin"],
@@ -56,9 +57,13 @@ export default function RootLayout({
 				/>
 			</head>
 			<body className={`${nunito.className} min-h-screen bg-background antialiased`}>
-				<Providers>
-					<AppLayout>{children}</AppLayout>
-				</Providers>
+				<ErrorBoundary>
+					<Providers>
+						<ErrorBoundary>
+							<AppLayout>{children}</AppLayout>
+						</ErrorBoundary>
+					</Providers>
+				</ErrorBoundary>
 			</body>
 		</html>
 	);

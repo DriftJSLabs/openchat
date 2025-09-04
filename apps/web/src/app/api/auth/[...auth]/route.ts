@@ -1,18 +1,24 @@
 import { betterAuth } from "better-auth";
 import { NextRequest } from "next/server";
+import { mkdir } from "fs/promises";
+import { join } from "path";
+import { env } from "@/lib/env";
 
-// Initialize Better Auth with simple in-memory database for now
+// Ensure data directory exists
+mkdir(env.AUTH_DATA_DIR, { recursive: true }).catch(() => {});
+
+// Initialize Better Auth with persistent SQLite database
 const auth = betterAuth({
   database: {
     type: "sqlite",
-    url: ":memory:", // In-memory database for testing
+    url: env.BETTER_AUTH_DATABASE_URL,
   },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
   },
-  secret: process.env.BETTER_AUTH_SECRET || "secret",
-  baseURL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || "http://localhost:3001",
+  secret: env.BETTER_AUTH_SECRET,
+  baseURL: env.getBaseURL(),
 });
 
 export const GET = async (req: NextRequest) => {

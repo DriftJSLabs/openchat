@@ -28,15 +28,18 @@ interface StreamData {
   savedToDb: boolean;
 }
 
+// Get initial model from localStorage (outside component to avoid recreation)
+const getInitialModel = () => {
+  if (typeof window !== 'undefined') {
+    const savedModel = localStorage.getItem('selectedModel');
+    return savedModel || "openai/gpt-4o-mini";
+  }
+  return "openai/gpt-4o-mini";
+};
+
 export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   // Load saved model from localStorage or use default
-  const [selectedModel, setSelectedModel] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedModel = localStorage.getItem('selectedModel');
-      return savedModel || "openai/gpt-4o-mini";
-    }
-    return "openai/gpt-4o-mini";
-  });
+  const [selectedModel, setSelectedModel] = useState(getInitialModel);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -67,12 +70,13 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const sendMessage = useMutation(api.messages.sendMessage);
   const updateMessage = useMutation(api.messages.updateMessage);
 
-  // Save model selection to localStorage whenever it changes
-  useEffect(() => {
+  // Handle model change with localStorage update
+  const handleModelChange = useCallback((newModel: string) => {
+    setSelectedModel(newModel);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedModel', selectedModel);
+      localStorage.setItem('selectedModel', newModel);
     }
-  }, [selectedModel]);
+  }, []);
 
   // Improved scroll detection with debouncing
   const handleScroll = useCallback(() => {
@@ -112,7 +116,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         });
       });
     }
-  }, [messages?.length, streamingContent]); // Only trigger on new messages or streaming updates
+  }, [messages?.length, streamingContent, isUserScrolling]); // Only trigger on new messages or streaming updates
 
   // Scroll to bottom function
   const scrollToBottom = useCallback(() => {
@@ -125,30 +129,36 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   }, []);
 
   useEffect(() => {
-    if (chat?.title) {
-      document.title = `${chat.title} - OpenChat`;
-    } else {
-      document.title = "Chat - OpenChat";
-    }
+    const title = chat?.title ? `${chat.title} - OpenChat` : "Chat - OpenChat";
+    document.title = title;
+    
+    // Cleanup function to reset title when component unmounts
+    return () => {
+      document.title = "OpenChat";
+    };
   }, [chat?.title]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollCheckTimer.current) {
+        clearTimeout(scrollCheckTimer.current);
+        scrollCheckTimer.current = null;
+      }
+    };
+  }, []);
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
-      console.log('[STOP] User clicked stop button');
-      console.log('[STOP] Current streamingContent length:', streamingContent.length);
-      console.log('[STOP] isStreamSavedRef.current:', isStreamSavedRef.current);
       
       // Set abort flag IMMEDIATELY before sending abort signal
       isAbortingRef.current = true;
-      console.log('[STOP] Set isAbortingRef = true');
       
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      console.log('[STOP] Abort signal sent');
       
       // Handle stopping during continuation differently
       if (continuingMessageId && continuationContentRef.current) {
-        console.log('[STOP] Stopping continuation for message:', continuingMessageId);
         
         // Update the message in the database with the new partial content
         const messageId = continuingMessageId;
@@ -160,20 +170,11 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           // Use ref value which is always current
           const fullContent = currentContent + continuationContentRef.current;
           
-          console.log('[STOP] Content calculation:', {
-            currentContentLength: currentContent.length,
-            continuationRefLength: continuationContentRef.current.length,
-            fullContentLength: fullContent.length,
-            lastCharsOfCurrent: currentContent.slice(-20),
-            firstCharsOfContinuation: continuationContentRef.current.slice(0, 20)
-          });
-          
           // Update the message in the database
           updateMessage({
             messageId: messageId as Id<"messages">,
             content: fullContent,
           }).then(() => {
-            console.log('[STOP] Updated message in DB with new content, length:', fullContent.length);
             
             // Update the stream data to allow resuming again
             const updatedStreamData: StreamData = {
@@ -187,7 +188,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             setStoppedStreams(prev => {
               const newMap = new Map(prev);
               newMap.set(messageId, updatedStreamData);
-              console.log('[STOP] Updated stoppedStreams Map with canResume=true for message:', messageId);
               return newMap;
             });
             
@@ -197,7 +197,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             setStreamingContent('');
             continuationContentRef.current = ''; // Clear continuation ref
           }).catch(error => {
-            console.error('[STOP] Failed to update message:', error);
             // Still clear UI state on error
             setIsLoading(false);
             setContinuingMessageId(null);
@@ -217,11 +216,10 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       // For new messages (not continuation), handle differently
       // Don't save here - let handleSubmit be the single source of truth for saving
       // Just update the UI state
-      console.log('[STOP] Setting loading to false for new message stop');
       setIsLoading(false);
       // Don't clear streamingContent yet - handleSubmit needs it for saving
     }
-  }, [continuingMessageId, streamingContent]);
+  }, [continuingMessageId, stoppedStreams, messages, updateMessage]);
 
   const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests
   
@@ -241,9 +239,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     
     // Get the stream data for this message
     const streamData = stoppedStreams.get(messageId) as any;
-    console.log('[CONTINUE] Attempting to continue message:', messageId, streamData);
     if (!streamData || !streamData.canResume) {
-      console.error('Cannot resume stream for message:', messageId, 'streamData:', streamData);
       return;
     }
     
@@ -363,7 +359,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             toast.info(`Retrying in ${Math.ceil(delay / 1000)} seconds...`, {
               description: `Attempt ${retryCount + 1} of ${maxRetries}`
             });
-            console.log(`Rate limited (429). Retrying in ${delay}ms... (Attempt ${retryCount + 1}/${maxRetries})`);
             
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -375,7 +370,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           // For other errors, throw immediately
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('Continuation error:', response.status, errorText);
             throw new Error(`Continuation failed: ${response.status}`);
           }
         } catch (error) {
@@ -429,10 +423,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
                     setStreamingContent(continuedContent);
                   } else if (parsed.type === 'done') {
                     // Stream completed
-                    console.log('Stream completed:', parsed.streamId);
                   } else if (parsed.type === 'abort') {
                     // Stream was aborted
-                    console.log('Continuation stream aborted:', parsed.streamId);
                   }
                 } catch (e) {
                   // Handle plain text for OpenRouter
@@ -447,7 +439,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }
       } catch (streamError: any) {
         if (streamError?.name === 'AbortError') {
-          console.log('Continuation stopped by user');
           // Mark that the stream was stopped for proper handling
           wasStoppedEarly = true;
         } else {
@@ -468,7 +459,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         // Update or remove from stopped streams based on completion
         if (!wasStoppedEarly) {
           // Completed successfully - remove from stopped streams
-          console.log('[CONTINUE] Stream completed, removing from stoppedStreams');
           setStoppedStreams(prev => {
             const newMap = new Map(prev);
             newMap.delete(messageId);
@@ -483,11 +473,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             canResume: true,
             savedToDb: true
           };
-          console.log('[CONTINUE] Stream stopped again, updating stream data:', {
-            messageId,
-            canResume: updatedStreamData.canResume,
-            contentLength: fullContent.length
-          });
           setStoppedStreams(prev => {
             const newMap = new Map(prev);
             newMap.set(messageId, updatedStreamData);
@@ -497,7 +482,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       }
       
     } catch (error) {
-      console.error('Failed to continue generation:', error);
       toast.error('Failed to continue generation. Please try again.');
     } finally {
       setIsLoading(false);
@@ -525,7 +509,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
     lastRequestTimeRef.current = now;
 
-    console.log('[SUBMIT] Starting new message submission');
     const userMessage = input.trim();
     setInput("");
     setIsLoading(true);
@@ -533,7 +516,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     setIsUserScrolling(false); // Reset scroll when sending new message
     setShowScrollButton(false);
     isStreamSavedRef.current = false; // Reset save flag
-    console.log('[SUBMIT] Reset isStreamSavedRef.current to false');
 
     // Add user message to database
     await sendMessage({
@@ -619,7 +601,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           setIsLoading(false);
           
           // Don't throw for rate limits, just return gracefully
-          console.log('Rate limited on send:', errorData);
           return;
         }
         
@@ -654,12 +635,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
                     setStreamingContent(accumulatedContent);
                     // Log every 10th chunk to avoid spam
                     if (accumulatedContent.length % 100 < parsed.content.length) {
-                      console.log('[SUBMIT] Accumulated content length:', accumulatedContent.length);
                     }
                   } else if (parsed.type === 'done') {
-                    console.log('[SUBMIT] Stream completed normally:', parsed.streamId);
                   } else if (parsed.type === 'abort') {
-                    console.log('[SUBMIT] Stream aborted by server:', parsed.streamId);
                     wasStoppedEarly = true;
                   }
                 } catch (e) {
@@ -679,37 +657,26 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }
       } catch (streamError: any) {
         if (streamError?.name === 'AbortError') {
-          console.log('[SUBMIT] Stream caught AbortError');
-          console.log('[SUBMIT] isAbortingRef.current:', isAbortingRef.current);
-          console.log('[SUBMIT] accumulatedContent length:', accumulatedContent.length);
           wasStoppedEarly = true;
         } else {
           throw streamError;
         }
       }
 
-      console.log('[SUBMIT] After stream - checking if should save');
-      console.log('[SUBMIT] accumulatedContent.trim() length:', accumulatedContent.trim().length);
-      console.log('[SUBMIT] isStreamSavedRef.current:', isStreamSavedRef.current);
-      console.log('[SUBMIT] wasStoppedEarly:', wasStoppedEarly);
-
       // Save assistant message if not already saved
       // Use ref value which is always current (in case state is stale)
       const contentToSave = accumulatedContentRef.current || accumulatedContent;
       if (contentToSave.trim() && !isStreamSavedRef.current) {
-        console.log('[SUBMIT] Saving message with content length:', contentToSave.length);
         const assistantMessageId = await sendMessage({
           chatId: chatId as Id<"chats">,
           content: contentToSave,
           role: "assistant",
         });
         
-        console.log('[SUBMIT] Message saved successfully with ID:', assistantMessageId);
         isStreamSavedRef.current = true;
         currentMessageIdRef.current = assistantMessageId;
         
         // Clear streaming content immediately after saving to prevent duplicate display
-        console.log('[SUBMIT] Clearing streamingContent after save to prevent duplicate display');
         setStreamingContent("");
 
         // Store for resumption if stopped early
@@ -728,18 +695,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }
       }
     } catch (error: any) {
-      console.error("Chat error:", error);
       if (error?.name !== 'AbortError') {
         toast.error(error.message || "Failed to send message. Please try again.");
       }
     } finally {
-      console.log('[SUBMIT] Finally block - cleaning up');
-      console.log('[SUBMIT] Resetting flags');
       setIsLoading(false);
       // Clear streaming content if it hasn't been cleared yet
       setStreamingContent(prev => {
         if (prev) {
-          console.log('[SUBMIT] Clearing remaining streamingContent in finally');
         }
         return "";
       });
@@ -749,7 +712,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       isStreamSavedRef.current = false;
       isAbortingRef.current = false; // Reset abort flag
       accumulatedContentRef.current = ""; // Clear accumulated content ref
-      console.log('[SUBMIT] Cleanup complete');
     }
   };
 
@@ -831,8 +793,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             </div>
           </motion.div>
         ))}
-        
-        
+
         {/* Regular streaming for new messages */}
         {streamingContent && !continuingMessageId && (
           <motion.div
@@ -871,7 +832,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             value={input}
             onChange={setInput}
             onSubmit={handleSubmit}
-            onModelChange={setSelectedModel}
+            onModelChange={handleModelChange}
             selectedModel={selectedModel}
             isLoading={isLoading}
             isConnected={canSendMessage}

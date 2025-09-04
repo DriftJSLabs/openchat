@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import ChatPageClient from "./chat-client-v2";
 import MindMapClient from "./mindmap-client";
+import { ChatErrorBoundary } from "@/components/error-boundary";
 
 export default function ChatPage() {
   const params = useParams();
@@ -49,8 +50,16 @@ export default function ChatPage() {
   
   // Render appropriate view based on chat mode
   if (chat.viewMode === "mindmap") {
-    return <MindMapClient chatId={chatId} />;
+    return (
+      <ChatErrorBoundary chatId={chatId}>
+        <MindMapClient chatId={chatId} />
+      </ChatErrorBoundary>
+    );
   }
   
-  return <ChatPageClient chatId={chatId} />;
+  return (
+    <ChatErrorBoundary chatId={chatId}>
+      <ChatPageClient chatId={chatId} />
+    </ChatErrorBoundary>
+  );
 }
