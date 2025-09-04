@@ -1,12 +1,28 @@
+import { convexAuth } from "@convex-dev/auth/server";
+import { Password } from "@convex-dev/auth/providers/Password";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { ConvexError } from "convex/values";
-import { auth } from "./auth.config";
+
+export const { auth, signIn, signOut, store } = convexAuth({
+  providers: [
+    Password({
+      id: "password",
+      profile(params) {
+        const email = params.email as string;
+        return {
+          email: email,
+          name: email.split('@')[0],
+        };
+      },
+    }),
+  ],
+});
 
 export async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<string | null> {
   // Use Convex Auth to get the current user
-  const userId = await auth.getUserId(ctx);
+  const identity = await ctx.auth.getUserIdentity();
   
-  if (!userId) {
+  if (!identity) {
     // Development fallback - only enable in development with explicit flag
     // This ensures it won't accidentally activate in production
     if (
@@ -19,7 +35,7 @@ export async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<str
     return null;
   }
   
-  return userId;
+  return identity.subject;
 }
 
 export async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
