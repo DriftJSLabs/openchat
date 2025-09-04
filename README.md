@@ -86,3 +86,4 @@ openchat/
 - `bun dev:web`: Start only the web application
 - `bun dev:setup`: Setup and configure your Convex project
 - `bun check-types`: Check TypeScript types across all apps
+# Authentication Setup Complete
