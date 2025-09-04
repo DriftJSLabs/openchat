@@ -46,4 +46,4 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> 
   }
   
   return userId;
-}
+}// JWT keys configured in production
