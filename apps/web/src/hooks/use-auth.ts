@@ -2,40 +2,32 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../server/convex/_generated/api";
-import { useEffect, useState } from "react";
-import { authClient } from "@/lib/auth-client";
+import { useEffect } from "react";
 
 export function useAuth() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const user = useQuery(api.users.viewer);
   const ensureUser = useMutation(api.users.ensureUser);
   
   useEffect(() => {
-    // Check authentication status
-    authClient.getSession().then((session) => {
-      setIsAuthenticated(!!session);
-      setIsLoading(false);
-      
-      // Ensure user is created in database when authenticated
-      if (session) {
-        ensureUser();
-      }
-    });
-  }, [ensureUser]);
+    // Ensure user is created in database when we have a user
+    if (user && !user._id.includes("dev_user")) {
+      ensureUser();
+    }
+  }, [user, ensureUser]);
 
   return {
-    isAuthenticated: isAuthenticated && !!user,
-    isLoading,
+    isAuthenticated: !!user,
+    isLoading: user === undefined,
     user,
     signIn: async () => {
-      // Redirect to sign-in page
-      window.location.href = "/sign-in";
+      // For now, just reload to trigger Convex auth
+      // In production, you'd integrate with Convex Auth providers
+      window.location.reload();
     },
     signOut: async () => {
-      await authClient.signOut();
-      setIsAuthenticated(false);
-      window.location.href = "/";
+      // For now, just reload
+      // In production, you'd clear Convex auth session
+      window.location.reload();
     },
   };
 }

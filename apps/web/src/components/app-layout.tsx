@@ -152,7 +152,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       toast.success("Signed out successfully", {
         description: "You have been signed out of your account."
       });
-      router.push("/sign-in");
+      router.push("/");
     } catch (error) {
       toast.error("Sign-out failed", {
         description: "There was an issue signing out. Please try again."

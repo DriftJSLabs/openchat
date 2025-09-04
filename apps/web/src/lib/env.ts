@@ -1,37 +1,27 @@
-import { randomBytes } from 'crypto';
+// Environment variable configuration for OpenChat
+// Using Convex for authentication and database
 
-// Development-only secret generation
-function generateDevSecret(name: string): string {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(`${name} is required in production`);
-  }
-  // Generate a deterministic but unique secret for development
-  const devSecret = randomBytes(32).toString('hex');
-  return devSecret;
-}
-
-// Environment variable validation
 class EnvironmentConfig {
-  // Required variables
+  // Required for Convex
   readonly NEXT_PUBLIC_CONVEX_URL: string;
-  readonly BETTER_AUTH_SECRET: string;
-  readonly BETTER_AUTH_DATABASE_URL: string;
+  
+  // Required for OpenRouter token encryption
   readonly OPENROUTER_ENCRYPTION_SECRET: string;
   
   // Optional but recommended for production
   readonly NEXT_PUBLIC_APP_URL: string;
   readonly NEXT_PUBLIC_OPENROUTER_APP_URL: string;
   
-  // Optional AI provider keys
-  readonly OPENAI_API_KEY?: string;
-  readonly ANTHROPIC_API_KEY?: string;
-  
-  // Data directories
-  readonly AUTH_DATA_DIR: string;
+  // Data directories (for local development)
   readonly STREAM_DATA_DIR: string;
+  
+  // Development/Production flags
+  readonly NODE_ENV: string;
+  readonly ENABLE_DEV_AUTH?: string;
+  readonly CONVEX_ENV?: string;
 
   constructor() {
-    // Validate required variables
+    // Validate required Convex URL
     const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) {
       throw new Error(
@@ -41,68 +31,24 @@ class EnvironmentConfig {
     }
     this.NEXT_PUBLIC_CONVEX_URL = convexUrl;
 
-    // Handle auth secret
-    this.BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET || 
-      generateDevSecret('BETTER_AUTH_SECRET');
+    // OpenRouter encryption secret (can be any string in dev)
+    this.OPENROUTER_ENCRYPTION_SECRET = 
+      process.env.OPENROUTER_ENCRYPTION_SECRET || 
+      'dev-encryption-key-change-in-production';
 
-    // Handle data directories
-    const dataDir = process.env.AUTH_DATA_DIR || '.data';
-    this.AUTH_DATA_DIR = dataDir;
-    this.STREAM_DATA_DIR = process.env.STREAM_DATA_DIR || `${dataDir}/streams`;
+    // Application URLs
+    this.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
+    this.NEXT_PUBLIC_OPENROUTER_APP_URL = 
+      process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 
+      'http://localhost:3001';
+
+    // Data directories
+    this.STREAM_DATA_DIR = process.env.STREAM_DATA_DIR || '.data/streams';
     
-    // Handle database URL
-    this.BETTER_AUTH_DATABASE_URL = process.env.BETTER_AUTH_DATABASE_URL || 
-      `file:${dataDir}/auth.db`;
-
-    // Handle encryption secret
-    this.OPENROUTER_ENCRYPTION_SECRET = process.env.OPENROUTER_ENCRYPTION_SECRET ||
-      generateDevSecret('OPENROUTER_ENCRYPTION_SECRET');
-
-    // Handle app URLs
-    const defaultUrl = process.env.NODE_ENV === 'production' 
-      ? '' 
-      : 'http://localhost:3001';
-    
-    this.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || defaultUrl;
-    this.NEXT_PUBLIC_OPENROUTER_APP_URL = process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 
-      this.NEXT_PUBLIC_APP_URL || 
-      defaultUrl;
-
-    if (process.env.NODE_ENV === 'production' && !this.NEXT_PUBLIC_APP_URL) {
-      throw new Error(
-        'NEXT_PUBLIC_APP_URL is required in production. ' +
-        'Set it to your deployment URL (e.g., https://your-app.vercel.app)'
-      );
-    }
-
-    // Optional AI provider keys
-    this.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    this.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
-    // Log configuration status in development
-    if (process.env.NODE_ENV !== 'production') {
-      this.logConfigStatus();
-    }
-  }
-
-  private logConfigStatus() {
-    const status = {
-      'Convex URL': this.NEXT_PUBLIC_CONVEX_URL ? '✅' : '❌',
-      'Auth Secret': this.BETTER_AUTH_SECRET ? '✅' : '❌',
-      'Database URL': this.BETTER_AUTH_DATABASE_URL ? '✅' : '❌',
-      'Encryption Secret': this.OPENROUTER_ENCRYPTION_SECRET ? '✅' : '❌',
-      'App URL': this.NEXT_PUBLIC_APP_URL ? '✅' : '⚠️',
-      'OpenAI API Key': this.OPENAI_API_KEY ? '✅' : '➖',
-      'Anthropic API Key': this.ANTHROPIC_API_KEY ? '✅' : '➖',
-    };
-
-    Object.entries(status).forEach(([key, value]) => {
-      });
-  }
-
-  // Utility method to check if any AI provider is configured
-  hasAIProvider(): boolean {
-    return Boolean(this.OPENAI_API_KEY || this.ANTHROPIC_API_KEY);
+    // Environment flags
+    this.NODE_ENV = process.env.NODE_ENV || 'development';
+    this.ENABLE_DEV_AUTH = process.env.ENABLE_DEV_AUTH;
+    this.CONVEX_ENV = process.env.CONVEX_ENV;
   }
 
   // Get the base URL for the application
@@ -111,39 +57,31 @@ class EnvironmentConfig {
   }
 }
 
-// Create and validate environment configuration
+// Create and export environment configuration
 let env: EnvironmentConfig;
 
-// During build, skip validation to prevent build failures
+// During build time or on Vercel, use minimal config
 const isBuildTime = process.env.NODE_ENV === 'production' && typeof window === 'undefined';
 const isVercelBuild = process.env.VERCEL === '1';
 
 try {
   if (isBuildTime || isVercelBuild) {
     // During build, create a minimal config that won't fail
-    const buildEnv = {
+    env = {
       NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
-      NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
-      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'build-time-secret',
-      BETTER_AUTH_DATABASE_URL: process.env.BETTER_AUTH_DATABASE_URL || '.data/auth.db',
-      AUTH_DATA_DIR: '.data',
       OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'build-time-secret',
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+      NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
       STREAM_DATA_DIR: process.env.STREAM_DATA_DIR || '.data/streams',
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       NODE_ENV: process.env.NODE_ENV || 'development',
       ENABLE_DEV_AUTH: process.env.ENABLE_DEV_AUTH,
       CONVEX_ENV: process.env.CONVEX_ENV,
-      hasAIProvider: () => false,
       getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
-      logConfigStatus: () => {},
-    };
-    env = buildEnv as unknown as EnvironmentConfig;
+    } as unknown as EnvironmentConfig;
   } else {
     env = new EnvironmentConfig();
   }
-  } catch (error) {
+} catch (error) {
   if (process.env.NODE_ENV === 'production' && !isVercelBuild && !isBuildTime) {
     // Fail fast in production (but not during build)
     process.exit(1);
