@@ -1,18 +1,35 @@
 import { betterAuth } from "better-auth";
 import { NextRequest } from "next/server";
-import { mkdir } from "fs/promises";
-import { join } from "path";
 import { env } from "@/lib/env";
 
-// Ensure data directory exists
-mkdir(env.AUTH_DATA_DIR, { recursive: true }).catch(() => {});
-
-// Initialize Better Auth with persistent SQLite database
-const auth = betterAuth({
-  database: {
-    type: "sqlite",
+// Initialize Better Auth with appropriate database for environment
+const getDatabaseConfig = () => {
+  // On Vercel serverless, use in-memory SQLite
+  // Note: This means sessions won't persist across function invocations
+  // For production, use a proper database service like Vercel Postgres or Neon
+  if (process.env.VERCEL === '1') {
+    return {
+      type: "sqlite" as const,
+      url: ":memory:",
+    };
+  }
+  
+  // Local development uses file-based SQLite
+  return {
+    type: "sqlite" as const,
     url: env.BETTER_AUTH_DATABASE_URL,
-  },
+  };
+};
+
+// Only create directory in local development
+if (process.env.VERCEL !== '1') {
+  import('fs/promises').then(({ mkdir }) => {
+    mkdir(env.AUTH_DATA_DIR, { recursive: true }).catch(() => {});
+  });
+}
+
+const auth = betterAuth({
+  database: getDatabaseConfig(),
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
