@@ -114,11 +114,12 @@ class EnvironmentConfig {
 // Create and validate environment configuration
 let env: EnvironmentConfig;
 
-// During Vercel build, skip validation to prevent build failures
-const isVercelBuild = process.env.VERCEL === '1' && process.env.CI === '1';
+// During build, skip validation to prevent build failures
+const isBuildTime = process.env.NODE_ENV === 'production' && typeof window === 'undefined';
+const isVercelBuild = process.env.VERCEL === '1';
 
 try {
-  if (isVercelBuild) {
+  if (isBuildTime || isVercelBuild) {
     // During build, create a minimal config that won't fail
     const buildEnv = {
       NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
@@ -142,8 +143,8 @@ try {
   } else {
     env = new EnvironmentConfig();
   }
-} catch (error) {
-  if (process.env.NODE_ENV === 'production' && !isVercelBuild) {
+  } catch (error) {
+  if (process.env.NODE_ENV === 'production' && !isVercelBuild && !isBuildTime) {
     // Fail fast in production (but not during build)
     process.exit(1);
   }
