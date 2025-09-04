@@ -8,31 +8,13 @@ export const currentUser = query({
       return null;
     }
 
-    // Get or create user based on the authentication provider's token
-    const tokenIdentifier = identity.tokenIdentifier;
-    
-    // Try to find existing user by email if email is available
-    if (identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email!))
-        .first();
-      
-      if (user) {
-        return {
-          ...user,
-          tokenIdentifier,
-        };
-      }
-    }
-    
-    // Return minimal user info from identity if no user record
+    // For Convex Auth, the identity contains the user info
     return {
-      _id: tokenIdentifier as any,
+      _id: identity.subject,
       _creationTime: Date.now(),
       name: identity.name || identity.email?.split("@")[0] || "User",
       email: identity.email || "",
-      tokenIdentifier,
+      tokenIdentifier: identity.subject,
     };
   },
 });
@@ -45,29 +27,13 @@ export const viewer = query({
       return null;
     }
 
-    const tokenIdentifier = identity.tokenIdentifier;
-    
-    if (identity.email) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email!))
-        .first();
-      
-      if (user) {
-        return {
-          ...user,
-          tokenIdentifier,
-        };
-      }
-    }
-    
-    // Return minimal user info from identity if no user record
+    // For Convex Auth, the identity contains the user info
     return {
-      _id: tokenIdentifier as any,
+      _id: identity.subject,
       _creationTime: Date.now(),
       name: identity.name || identity.email?.split("@")[0] || "User",
       email: identity.email || "",
-      tokenIdentifier,
+      tokenIdentifier: identity.subject,
     };
   },
 });
@@ -76,26 +42,19 @@ export const ensureUser = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity || !identity.email) {
+    if (!identity) {
       return null;
     }
     
-    // Check if user exists
-    let user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
-      .first();
-    
-    if (!user) {
-      // Create new user
-      const userId = await ctx.db.insert("users", {
-        name: identity.name || identity.email.split("@")[0],
-        email: identity.email,
-      });
-      
-      user = await ctx.db.get(userId);
-    }
-    
-    return user;
+    // For Convex Auth, we don't need to create a separate user record
+    // The auth system handles user creation
+    // Just return the user info from the identity
+    return {
+      _id: identity.subject,
+      _creationTime: Date.now(),
+      name: identity.name || identity.email?.split("@")[0] || "User",
+      email: identity.email || "",
+      tokenIdentifier: identity.subject,
+    };
   },
 });
