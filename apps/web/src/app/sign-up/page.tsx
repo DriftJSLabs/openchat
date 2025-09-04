@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { toast } from "sonner";
 
 export default function SignUpPage() {
-  const router = useRouter();
   const { signIn } = useAuthActions();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -35,7 +33,8 @@ export default function SignUpPage() {
 
     try {
       await signIn("password", { email, password, flow: "signUp" });
-      router.push("/");
+      // Force a full page reload to refresh auth state
+      window.location.href = "/";
       toast.success("Account created!", {
         description: "Welcome to OpenChat"
       });

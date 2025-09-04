@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { toast } from "sonner";
 
 export default function SignInPage() {
-  const router = useRouter();
   const { signIn } = useAuthActions();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -21,7 +19,8 @@ export default function SignInPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      router.push("/");
+      // Force a full page reload to refresh auth state
+      window.location.href = "/";
     } catch (error: any) {
       // Better error messages
       if (error.message?.includes("Invalid email or password")) {
