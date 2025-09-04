@@ -29,5 +29,7 @@ jobs:
           CONVEX_DEPLOYMENT_NAME: production
           CONVEX_URL: ${{ secrets.CONVEX_URL }}
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_SECRET_1: ${{ secrets.AUTH_SECRET }}
         run: |
           npx convex deploy --url $CONVEX_URL --admin-key $CONVEX_DEPLOY_KEY

@@ -14,4 +14,9 @@ export const { auth, signIn, signOut, store } = convexAuth({
       },
     }),
   ],
+  callbacks: {
+    async redirect({ redirectTo }) {
+      return redirectTo ?? "/";
+    },
+  },
 });
