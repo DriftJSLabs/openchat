@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/mode-toggle";
-import { Menu, X, LogOut, Pencil, Check, AlertTriangle, Info, Sparkles, Unlink, ExternalLink, Plus, MessageSquare } from "lucide-react";
+import { Menu, X, LogOut, Pencil, Check, AlertTriangle, Info, Sparkles, Unlink, ExternalLink, Plus, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../server/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { toast } from "sonner";
-import { SignInForm, SignUpForm } from "@/components/auth-forms";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +36,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [animatedChats, setAnimatedChats] = useState<Set<string>>(new Set());
   const [editingChat, setEditingChat] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [signInMode, setSignInMode] = useState(true);
   
   const createChat = useMutation(api.chats.createChat);
   const deleteChat = useMutation(api.chats.deleteChat);
@@ -442,9 +440,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Link>
           </div>
 
-          {/* New Chat Button or Auth Form */}
-          {isAuthenticated ? (
-            <div className="p-4">
+          {/* New Chat Button or Sign In Button */}
+          <div className="p-4">
+            {isAuthenticated ? (
               <Button
                 onClick={handleNewChat}
                 className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
@@ -453,44 +451,17 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <Plus className="h-4 w-4" />
                 New Chat
               </Button>
-            </div>
-          ) : (
-            // Sign In/Up Form when not authenticated
-            <div className="p-4 space-y-4">
-              <div className="text-center mb-4">
-                <h2 className="text-lg font-semibold">Welcome to OpenChat</h2>
-                <p className="text-sm text-muted-foreground mt-1">Sign in to start chatting</p>
-              </div>
-              
-              {signInMode ? (
-                <>
-                  <SignInForm onSuccess={() => setSidebarOpen(false)} />
-                  <div className="text-center text-sm">
-                    <span className="text-muted-foreground">Don't have an account? </span>
-                    <button
-                      onClick={() => setSignInMode(false)}
-                      className="text-primary hover:underline"
-                    >
-                      Sign up
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <SignUpForm onSuccess={() => setSidebarOpen(false)} />
-                  <div className="text-center text-sm">
-                    <span className="text-muted-foreground">Already have an account? </span>
-                    <button
-                      onClick={() => setSignInMode(true)}
-                      className="text-primary hover:underline"
-                    >
-                      Sign in
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+            ) : (
+              <Button
+                onClick={() => router.push("/sign-in" as any)}
+                className="w-full justify-center gap-2"
+                variant="default"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign In to Start
+              </Button>
+            )}
+          </div>
 
           {/* Chats List */}
           {isAuthenticated && (
@@ -588,9 +559,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Link>
           </div>
 
-          {/* New Chat Button or Auth Form */}
-          {isAuthenticated ? (
-            <div className="p-4">
+          {/* New Chat Button or Sign In Button */}
+          <div className="p-4">
+            {isAuthenticated ? (
               <Button
                 onClick={handleNewChat}
                 className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
@@ -599,44 +570,17 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <Plus className="h-4 w-4" />
                 New Chat
               </Button>
-            </div>
-          ) : (
-            // Sign In/Up Form when not authenticated
-            <div className="p-4 space-y-4">
-              <div className="text-center mb-4">
-                <h2 className="text-lg font-semibold">Welcome to OpenChat</h2>
-                <p className="text-sm text-muted-foreground mt-1">Sign in to start chatting</p>
-              </div>
-              
-              {signInMode ? (
-                <>
-                  <SignInForm onSuccess={() => setSidebarOpen(false)} />
-                  <div className="text-center text-sm">
-                    <span className="text-muted-foreground">Don't have an account? </span>
-                    <button
-                      onClick={() => setSignInMode(false)}
-                      className="text-primary hover:underline"
-                    >
-                      Sign up
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <SignUpForm onSuccess={() => setSidebarOpen(false)} />
-                  <div className="text-center text-sm">
-                    <span className="text-muted-foreground">Already have an account? </span>
-                    <button
-                      onClick={() => setSignInMode(true)}
-                      className="text-primary hover:underline"
-                    >
-                      Sign in
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+            ) : (
+              <Button
+                onClick={() => router.push("/sign-in" as any)}
+                className="w-full justify-center gap-2"
+                variant="default"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign In to Start
+              </Button>
+            )}
+          </div>
 
           {/* Chats List */}
           {isAuthenticated && (
