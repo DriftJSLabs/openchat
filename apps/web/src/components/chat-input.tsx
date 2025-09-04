@@ -62,7 +62,7 @@ export function ChatInput({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const messageToSend = externalValue !== undefined ? externalValue : message
-    if (messageToSend.trim() && isConnected && !isLoading) {
+    if (messageToSend.trim() && !isLoading) {
       if (externalOnSubmit) {
         externalOnSubmit(e)
         // Don't clear here, let parent handle it
@@ -77,7 +77,7 @@ export function ChatInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       const messageToSend = externalValue !== undefined ? externalValue : message
-      if (messageToSend.trim() && isConnected && !isLoading) {
+      if (messageToSend.trim() && !isLoading) {
         handleSubmit(e as unknown as React.FormEvent)
       }
     }
@@ -94,10 +94,10 @@ export function ChatInput({
               value={message}
               onChange={(e) => handleMessageChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isConnected ? "Ask anything..." : "Connect to start chatting..."}
+              placeholder="Ask anything..."
               className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 resize-none border-none outline-none text-base leading-relaxed min-h-[60px] max-h-[200px] pr-12"
               rows={3}
-              disabled={!isConnected || isLoading}
+              disabled={isLoading}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement
                 target.style.height = "auto"
@@ -179,10 +179,10 @@ export function ChatInput({
                   <Button
                     type="submit"
                     size="icon"
-                    disabled={!(externalValue !== undefined ? externalValue : message).trim() || !isConnected}
+                    disabled={!(externalValue !== undefined ? externalValue : message).trim()}
                     className={cn(
                       "h-9 w-9 rounded-full transition-all",
-                      (externalValue !== undefined ? externalValue : message).trim() && isConnected
+                      (externalValue !== undefined ? externalValue : message).trim()
                         ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
                         : "bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50"
                     )}

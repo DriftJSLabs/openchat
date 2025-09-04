@@ -11,7 +11,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ExternalLink, Crown, Search, ChevronRight } from "lucide-react";
+import { ChevronDown, Crown, Search, ChevronRight } from "lucide-react";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { cn } from "@/lib/utils";
 
@@ -37,13 +37,10 @@ function formatPrice(price?: string) {
   return `$${num.toFixed(3)}`;
 }
 
-function getProviderIcon(provider: string) {
-  // Return empty string - no emojis
-  return '';
-}
+
 
 export function ModelSwitcher({ selectedModel, onModelChange, compact = false }: ModelSwitcherProps) {
-  const { isConnected, availableModels, connectOpenRouter, modelsLoading } = useOpenRouterAuth();
+  const { isConnected, availableModels, modelsLoading } = useOpenRouterAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     'Free Models': true, // Free models expanded by default
@@ -96,19 +93,23 @@ export function ModelSwitcher({ selectedModel, onModelChange, compact = false }:
     setSearchQuery(""); // Clear search when model is selected
   };
 
+  // When not connected, show disabled model selector with better messaging
   if (!isConnected) {
     return (
       <Button 
-        variant="ghost"
+        variant="outline"
         size={compact ? "sm" : "default"}
         className={cn(
-          "text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-950",
-          compact ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm"
+          "justify-start font-medium border-border/50 opacity-60 cursor-not-allowed",
+          compact ? "h-8 px-2 text-xs max-w-[140px]" : "h-9 px-3 text-sm min-w-[180px] max-w-[220px]"
         )}
-        onClick={connectOpenRouter}
+        disabled={true}
+        title="Connect OpenRouter from the sidebar to enable AI models"
       >
-        <ExternalLink className="h-3 w-3 mr-1.5" />
-        Connect OpenRouter
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className="truncate text-muted-foreground">Connect to use AI</span>
+        </div>
+        <ChevronDown className="h-4 w-4 ml-auto flex-shrink-0 text-muted-foreground opacity-50" />
       </Button>
     );
   }

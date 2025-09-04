@@ -1,10 +1,22 @@
 import { v } from "convex/values";
 import { mutation, query, action } from "./_generated/server";
 import { api } from "./_generated/api";
+import { getCurrentUserId } from "./auth";
 
 export const getMessages = query({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+    
+    // Verify the chat belongs to the user
+    const chat = await ctx.db.get(chatId);
+    if (!chat || chat.userId !== userId) {
+      return [];
+    }
+    
     return await ctx.db
       .query("messages")
       .withIndex("by_chat", (q) => q.eq("chatId", chatId))
@@ -19,18 +31,44 @@ export const sendMessage = mutation({
     content: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant")),
     model: v.optional(v.string()),
+    position: v.optional(v.object({ x: v.number(), y: v.number() })),
+    parentMessageId: v.optional(v.id("messages")),
+    highlightedText: v.optional(v.string()),
+    nodeStyle: v.optional(v.string()),
   },
-  handler: async (ctx, { chatId, content, role, model }) => {
+  handler: async (ctx, { chatId, content, role, model, position, parentMessageId, highlightedText, nodeStyle }) => {
     const chat = await ctx.db.get(chatId);
     if (!chat) throw new Error("Chat not found");
-    
+
+    // Get the current user ID for user messages
+    let userId: string;
+    if (role === "user") {
+      const currentUserId = await getCurrentUserId(ctx);
+      if (!currentUserId) {
+        throw new Error("Not authenticated");
+      }
+      
+      // Verify the chat belongs to the user
+      if (chat.userId !== currentUserId) {
+        throw new Error("Not authorized to send messages to this chat");
+      }
+      
+      userId = currentUserId;
+    } else {
+      userId = "assistant";
+    }
+
     const messageId = await ctx.db.insert("messages", {
       chatId,
-      userId: role === "user" ? "mock-user" : "assistant",
+      userId,
       content,
       role,
       model,
       createdAt: Date.now(),
+      position,
+      parentMessageId,
+      highlightedText,
+      nodeStyle,
     });
     
     await ctx.db.patch(chatId, {
@@ -70,6 +108,17 @@ export const addAssistantMessage = mutation({
     content: v.string(),
   },
   handler: async (ctx, { chatId, content }) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    
+    // Verify the chat belongs to the user
+    const chat = await ctx.db.get(chatId);
+    if (!chat || chat.userId !== userId) {
+      throw new Error("Not authorized to send messages to this chat");
+    }
+    
     return await ctx.db.insert("messages", {
       chatId,
       userId: "assistant",
@@ -86,8 +135,19 @@ export const updateMessage = mutation({
     content: v.string(),
   },
   handler: async (ctx, { messageId, content }) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    
     const message = await ctx.db.get(messageId);
     if (!message) throw new Error("Message not found");
+    
+    // Verify the user owns the chat that contains this message
+    const chat = await ctx.db.get(message.chatId);
+    if (!chat || chat.userId !== userId) {
+      throw new Error("Not authorized to update this message");
+    }
     
     // Update the message content
     await ctx.db.patch(messageId, {
@@ -102,5 +162,29 @@ export const updateMessage = mutation({
     }
     
     return messageId;
+  },
+});
+
+export const updateNodePosition = mutation({
+  args: {
+    messageId: v.id("messages"),
+    position: v.object({ x: v.number(), y: v.number() }),
+  },
+  handler: async (ctx, { messageId, position }) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    
+    const message = await ctx.db.get(messageId);
+    if (!message) throw new Error("Message not found");
+    
+    // Verify the user owns the chat that contains this message
+    const chat = await ctx.db.get(message.chatId);
+    if (!chat || chat.userId !== userId) {
+      throw new Error("Not authorized to update this message");
+    }
+    
+    await ctx.db.patch(messageId, { position });
   },
 });

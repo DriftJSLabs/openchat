@@ -6,7 +6,6 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModelSwitcher } from "@/components/model-switcher";
-import { OpenRouterConnect } from "@/components/auth/openrouter-connect";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { cn } from "@/lib/utils";
 import type { Id } from "server/convex/_generated/dataModel";
@@ -62,12 +61,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    // Check if OpenRouter is connected
-    if (!isConnected || !token) {
-      setError("Please connect your OpenRouter account to use AI features");
-      return;
-    }
-
+    // In development mode, work without OpenRouter connection
     const message = input.trim();
     setInput("");
     setIsLoading(true);
@@ -81,7 +75,37 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         role: "user",
       });
 
-      // Send to direct OpenRouter API
+      // If OpenRouter is not connected, show a message to connect
+      if (!isConnected || !token) {
+        console.log('🔗 OpenRouter not connected');
+        
+        // Simulate AI thinking time
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Show message to connect OpenRouter
+        const mockResponse = "To get AI responses, please connect to OpenRouter using the 'Connect OpenRouter' button in the sidebar.";
+        
+        // Simulate streaming
+        setStreamingContent('');
+        for (let i = 0; i <= mockResponse.length; i++) {
+          setStreamingContent(mockResponse.substring(0, i));
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        
+        // Save the mock response
+        await sendMessage({
+          chatId: chatId as Id<"chats">,
+          content: mockResponse,
+          role: "assistant",
+          model: "mock-model",
+        });
+        
+        setStreamingContent('');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Send to direct OpenRouter API (when connected)
       console.log('🚀 Sending to direct OpenRouter API:', { 
         model: selectedModel, 
         messagesCount: messages?.length || 0,
@@ -240,30 +264,23 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">{chat.title}</h1>
         </div>
         <div className="flex items-center gap-3">
-          {!isConnected && <OpenRouterConnect variant="outline" size="sm" />}
+          <ModelSwitcher 
+            selectedModel={selectedModel} 
+            onModelChange={setSelectedModel} 
+          />
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages?.length === 0 && !isConnected && (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-            <h2 className="text-2xl font-semibold mb-2">Connect OpenRouter to Start Chatting</h2>
-            <p className="text-muted-foreground max-w-md">
-              Connect your OpenRouter account to access AI models and start having conversations.
-            </p>
-            <OpenRouterConnect />
-          </div>
-        )}
-
-        {messages?.length === 0 && isConnected && (
+        {messages?.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <h2 className="text-2xl font-semibold mb-2">Start a conversation</h2>
             <p className="text-muted-foreground">
@@ -336,9 +353,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       </div>
 
       {/* Input form with integrated model picker */}
-      <div className="border-t border-border p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="relative z-10 border-t border-border p-4 bg-background flex flex-col items-center">
         {error && (
-          <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+          <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg w-full max-w-3xl">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm text-destructive flex-1">{error}</p>
               {input && (
@@ -367,8 +384,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             )}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <div className="flex-1 flex items-center rounded-full border border-input bg-background focus-within:ring-2 focus-within:ring-ring transition-all">
+        <form onSubmit={handleSubmit} className="flex gap-2 w-full max-w-3xl">
+          <div className="flex-1 flex items-center rounded-full border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
             {/* Model picker integrated into input */}
             {isConnected && (
               <>
@@ -384,20 +401,17 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                isConnected 
-                  ? `Message ${selectedModel.split('/').pop() || selectedModel}...` 
-                  : "Connect OpenRouter to start chatting..."
-              }
+              placeholder="Ask anything..."
               className="flex-1 bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none"
-              disabled={isLoading || !isConnected}
+              disabled={false}
+              autoFocus
             />
           </div>
           <Button
             type="submit"
             size="icon"
             className="rounded-full h-10 w-10 transition-all hover:scale-110 active:scale-95"
-            disabled={!input.trim() || isLoading || !isConnected}
+            disabled={!input.trim() || isLoading}
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

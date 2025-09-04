@@ -1,13 +1,17 @@
 "use client";
 
 import { ThemeProvider } from "./theme-provider";
-import { ConvexClientProvider } from "./convex-client-provider";
 import { OpenRouterAuthProvider } from "@/contexts/openrouter-auth";
+import { ClientToaster } from "./client-toaster";
+import { ConvexReactClient } from "convex/react";
+import { ConvexProvider } from "convex/react";
 import type { ReactNode } from "react";
+
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export default function Providers({ children }: { children: ReactNode }) {
 	return (
-		<ConvexClientProvider>
+		<ConvexProvider client={convex}>
 			<ThemeProvider
 				attribute="class"
 				defaultTheme="system"
@@ -16,8 +20,9 @@ export default function Providers({ children }: { children: ReactNode }) {
 			>
 				<OpenRouterAuthProvider>
 					{children}
+					<ClientToaster />
 				</OpenRouterAuthProvider>
 			</ThemeProvider>
-		</ConvexClientProvider>
+		</ConvexProvider>
 	);
 }

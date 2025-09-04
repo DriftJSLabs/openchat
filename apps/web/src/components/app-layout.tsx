@@ -5,10 +5,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/mode-toggle";
-import { Menu, Plus, X, LogOut, Pencil, Check, AlertTriangle, Info } from "lucide-react";
+import { Menu, X, LogOut, Pencil, Check, AlertTriangle, Info, Sparkles, Unlink, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../server/convex/_generated/api";
+import { NewChatMenu } from "@/components/new-chat-menu";
+import { useAuth } from "@/hooks/use-auth";
+import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +28,6 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
-  const [isAuthLoading, setIsAuthLoading] = React.useState(true);
   const [editingChat, setEditingChat] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
@@ -35,23 +37,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [deletedChats, setDeletedChats] = React.useState<Set<string>>(new Set());
   const pathname = usePathname();
   const router = useRouter();
-  
-  // Check authentication on mount and pathname changes
-  React.useEffect(() => {
-    const checkAuth = () => {
-      const user = localStorage.getItem("user");
-      setIsAuthenticated(!!user);
-      setIsAuthLoading(false);
-    };
-    
-    checkAuth();
-    // Check auth when pathname changes (after sign in/out)
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
-  }, [pathname]);
-  
+
+  // Use real authentication
+  const { isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
+  const { isConnected: isOpenRouterConnected, disconnect: disconnectOpenRouter, connectOpenRouter } = useOpenRouterAuth();
+
   const chats = useQuery(api.chats.getChats, isAuthenticated ? {} : "skip");
-  const createChat = useMutation(api.chats.createChat);
   const deleteChat = useMutation(api.chats.deleteChat);
   const updateChat = useMutation(api.chats.updateChat);
 
@@ -72,15 +63,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [chats]);
 
-  const handleNewChat = async () => {
-    try {
-      const id = await createChat({});
-      router.push(`/chat/${id}`);
-      setSidebarOpen(false);
-    } catch (error) {
-      console.error("Failed to create chat:", error);
-    }
-  };
+
 
   const performDelete = () => {
     if (!chatToDelete) return;
@@ -168,12 +151,19 @@ export function AppLayout({ children }: AppLayoutProps) {
     setEditingChat(null);
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem("user");
-    setIsAuthenticated(false);
-    router.push("/");
-    // Force a re-render
-    window.dispatchEvent(new Event('storage'));
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success("Signed out successfully", {
+        description: "You have been signed out of your account."
+      });
+      router.push("/sign-in");
+    } catch (error) {
+      console.error("Failed to sign out:", error);
+      toast.error("Sign-out failed", {
+        description: "There was an issue signing out. Please try again."
+      });
+    }
   };
 
   const renderChatItem = (chat: any, index: number) => {
@@ -187,8 +177,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           key={chat._id}
           data-chat-id={chat._id}
           className={cn(
-            "flex items-center gap-1 rounded-lg px-3 py-2 text-sm",
-            "bg-sidebar-accent transition-colors duration-150"
+            "flex items-center gap-1 px-2 text-sm",
+            "bg-sidebar-accent/40 transition-colors duration-150"
           )}
         >
           <input
@@ -235,13 +225,18 @@ export function AppLayout({ children }: AppLayoutProps) {
         onClick={() => setSidebarOpen(false)}
         data-chat-id={chat._id}
         className={cn(
-          "chat-item group flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-all duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-          isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+          "chat-item group flex items-center gap-1 px-2 text-sm transition-all duration-150 hover:bg-sidebar-accent/30",
+          isActive && "bg-sidebar-accent/40 font-medium",
           shouldAnimate && "chat-item-enter"
         )}
         style={{ animationDelay: shouldAnimate ? `${index * 40}ms` : '0ms' }}
       >
-        <span className="truncate font-medium flex-1 min-w-0 text-left">{chat.title}</span>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {chat.viewMode === "mindmap" && (
+            <Sparkles className="h-3 w-3 text-purple-500 flex-shrink-0" />
+          )}
+          <span className="truncate font-medium">{chat.title}</span>
+        </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <Button
             variant="ghost"
@@ -439,18 +434,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
 
           {/* New Chat Button */}
-          {isAuthenticated && (
-            <div className="p-4">
-              <Button
-                onClick={handleNewChat}
-                className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
-                variant="outline"
-              >
-                <Plus className="h-4 w-4" />
-                New Chat
-              </Button>
-            </div>
-          )}
+          <div className="p-4">
+            <NewChatMenu 
+              onChatCreated={() => setSidebarOpen(false)}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
 
           {/* Chats List */}
           {isAuthenticated && (
@@ -489,6 +478,29 @@ export function AppLayout({ children }: AppLayoutProps) {
           {/* Bottom Actions */}
           {isAuthenticated && (
             <div className="border-t border-sidebar-border p-4 space-y-2">
+              {/* OpenRouter Connection */}
+              {!isOpenRouterConnected ? (
+                <Button
+                  onClick={connectOpenRouter}
+                  className="w-full justify-start gap-2"
+                  variant="ghost"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Connect OpenRouter
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    disconnectOpenRouter();
+                    toast.success("Disconnected from OpenRouter");
+                  }}
+                  className="w-full justify-start gap-2"
+                  variant="ghost"
+                >
+                  <Unlink className="h-4 w-4" />
+                  Disconnect OpenRouter
+                </Button>
+              )}
               <Button
                 onClick={handleSignOut}
                 className="w-full justify-start gap-2"
@@ -526,18 +538,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
 
           {/* New Chat Button */}
-          {isAuthenticated && (
-            <div className="p-4">
-              <Button
-                onClick={handleNewChat}
-                className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
-                variant="outline"
-              >
-                <Plus className="h-4 w-4" />
-                New Chat
-              </Button>
-            </div>
-          )}
+          <div className="p-4">
+            <NewChatMenu 
+              onChatCreated={() => setSidebarOpen(false)}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
 
           {/* Chats List */}
           {isAuthenticated && (
@@ -576,6 +582,29 @@ export function AppLayout({ children }: AppLayoutProps) {
           {/* Bottom Actions */}
           {isAuthenticated && (
             <div className="border-t border-sidebar-border p-4 space-y-2">
+              {/* OpenRouter Connection */}
+              {!isOpenRouterConnected ? (
+                <Button
+                  onClick={connectOpenRouter}
+                  className="w-full justify-start gap-2"
+                  variant="ghost"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Connect OpenRouter
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    disconnectOpenRouter();
+                    toast.success("Disconnected from OpenRouter");
+                  }}
+                  className="w-full justify-start gap-2"
+                  variant="ghost"
+                >
+                  <Unlink className="h-4 w-4" />
+                  Disconnect OpenRouter
+                </Button>
+              )}
               <Button
                 onClick={handleSignOut}
                 className="w-full justify-start gap-2"

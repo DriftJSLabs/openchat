@@ -2,3 +2,5 @@ node_modules
 .turbo
 .alchemy
 .env
+*.bun-build
+.*.bun-build

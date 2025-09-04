@@ -131,8 +131,73 @@ export async function POST(req: NextRequest) {
 
       if (!openRouterResponse.ok) {
         const errorText = await openRouterResponse.text();
+        let errorMessage = `OpenRouter API error: ${openRouterResponse.status}`;
+        let isUpstreamRateLimit = false;
+        let suggestedAction = '';
+        
+        // Try to parse error JSON for more details
+        try {
+          const errorJson = JSON.parse(errorText);
+          
+          // Check if it's an upstream rate limit (provider's fault, not ours)
+          if (errorJson.error?.metadata?.raw) {
+            const rawMessage = errorJson.error.metadata.raw;
+            
+            // Check if it's an upstream rate limit
+            if (rawMessage.includes('temporarily rate-limited upstream') || 
+                rawMessage.includes('rate-limited upstream')) {
+              isUpstreamRateLimit = true;
+              
+              // Extract model name from the message
+              const modelMatch = rawMessage.match(/^([^:]+):?/);
+              const modelName = modelMatch ? modelMatch[1] : 'This model';
+              
+              errorMessage = `${modelName} is temporarily unavailable`;
+              suggestedAction = 'Try a different model or wait a moment';
+            } else {
+              errorMessage = rawMessage;
+            }
+          } else if (errorJson.error?.message) {
+            errorMessage = errorJson.error.message;
+          }
+        } catch (e) {
+          // If parsing fails, use the default error message
+          console.log('Failed to parse OpenRouter error:', e);
+        }
+        
+        // Handle rate limiting specifically
+        if (openRouterResponse.status === 429) {
+          const retryAfter = openRouterResponse.headers.get('Retry-After');
+          
+          console.log('OpenRouter Rate Limit:', {
+            isUpstreamRateLimit,
+            errorMessage,
+            retryAfter,
+            errorText
+          });
+          
+          const headers: HeadersInit = { 
+            'Content-Type': 'application/json'
+          };
+          
+          if (retryAfter) headers['Retry-After'] = retryAfter;
+          
+          return new Response(JSON.stringify({ 
+            error: errorMessage,
+            isUpstreamRateLimit,
+            suggestedAction: suggestedAction || (isUpstreamRateLimit 
+              ? 'Please try a different model or wait briefly'
+              : 'Please wait a moment and try again'),
+            retryAfter: retryAfter ? parseInt(retryAfter) : (isUpstreamRateLimit ? 5 : 60),
+            details: errorText
+          }), {
+            status: 429,
+            headers
+          });
+        }
+        
         return new Response(JSON.stringify({ 
-          error: `OpenRouter API error: ${openRouterResponse.status}`,
+          error: errorMessage,
           details: errorText
         }), {
           status: openRouterResponse.status,

@@ -128,7 +128,7 @@ export function OpenRouterAuthProvider({ children }: OpenRouterAuthProviderProps
       // Retrieve and verify PKCE state
       const storedPKCE = getPKCEState();
       if (!storedPKCE) {
-        console.error('No stored PKCE state found');
+        console.debug('No stored PKCE state found');
         // Try to recover by checking if we already have a token
         const existingToken = getStoredToken();
         if (existingToken && await testToken(existingToken)) {

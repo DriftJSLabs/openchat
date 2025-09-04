@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Nunito } from "next/font/google";
 import "../index.css";
+import "reactflow/dist/style.css";
+import "../styles/reactflow-override.css";
 import Providers from "@/components/providers";
 import { AppLayout } from "@/components/app-layout";
 
@@ -14,12 +16,6 @@ export const metadata: Metadata = {
 	title: "OpenChat",
 	description: "AI-powered chat application",
 	manifest: "/manifest.json",
-	themeColor: "#6231ce",
-	viewport: {
-		width: "device-width",
-		initialScale: 1,
-		maximumScale: 1,
-	},
 	appleWebApp: {
 		capable: true,
 		statusBarStyle: "default",
@@ -28,6 +24,13 @@ export const metadata: Metadata = {
 	icons: {
 		icon: "/favicon.ico",
 	},
+};
+
+export const viewport = {
+	width: "device-width",
+	initialScale: 1,
+	maximumScale: 1,
+	themeColor: "#6231ce",
 };
 
 export const dynamic = "force-dynamic";

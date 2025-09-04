@@ -1,0 +1,68 @@
+/* Override React Flow default styles to match our theme */
+
+/* Smooth scrolling and transitions */
+.react-flow__renderer {
+  transition: transform 0.2s ease-out;
+}
+
+.react-flow__viewport {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hide React Flow attribution */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Style edges to match theme */
+.react-flow__edge-path {
+  stroke: hsl(var(--border));
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: hsl(var(--primary) / 0.5);
+  animation: dashdraw 0.5s linear infinite;
+}
+
+@keyframes dashdraw {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Remove default node border */
+.react-flow__node {
+  border: none;
+  background: transparent;
+}
+
+/* Selection box style */
+.react-flow__nodesselection-rect,
+.react-flow__selection {
+  background: hsl(var(--primary) / 0.08);
+  border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+/* Hide resize handle */
+.react-flow__resize-control {
+  display: none;
+}
+
+/* Minimap styles if we add it back */
+.react-flow__minimap {
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.5rem;
+  width: 120px !important;
+  height: 80px !important;
+}
+
+.react-flow__minimap-mask {
+  fill: hsl(var(--card)) !important;
+}
+
+.react-flow__minimap-node {
+  fill: hsl(var(--muted-foreground)) !important;
+  stroke: none !important;
+}

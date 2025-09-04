@@ -105,6 +105,103 @@ body {
   @apply bg-background text-foreground;
 }
 
+/* Sonner Toast - Use theme variables */
+[data-sonner-toaster] {
+  position: fixed !important;
+  z-index: 9999 !important;
+}
+
+[data-sonner-toast] {
+  background: oklch(var(--background)) !important;
+  color: oklch(var(--foreground)) !important;
+  border: 1px solid oklch(var(--border)) !important;
+  outline: 1px solid oklch(var(--border)) !important;
+  outline-offset: 1px !important;
+  border-radius: var(--radius) !important;
+  padding: 1rem !important;
+  padding-right: 2.5rem !important;
+  box-shadow: var(--shadow-lg) !important;
+  font-family: var(--font-sans) !important;
+  position: relative !important;
+}
+
+/* Error toasts */
+[data-sonner-toast][data-type="error"] {
+  background: oklch(var(--background)) !important;
+  border-color: oklch(var(--destructive)) !important;
+  outline-color: oklch(var(--destructive) / 0.2) !important;
+  color: oklch(var(--destructive)) !important;
+}
+
+/* Warning toasts */
+[data-sonner-toast][data-type="warning"] {
+  background: oklch(var(--background)) !important;
+  border-color: oklch(var(--chart-3)) !important; /* Using chart-3 yellow */
+  outline-color: oklch(var(--chart-3) / 0.2) !important;
+  color: oklch(var(--chart-3)) !important;
+}
+
+/* Success toasts */
+[data-sonner-toast][data-type="success"] {
+  background: oklch(var(--background)) !important;
+  border-color: oklch(var(--chart-4)) !important; /* Using chart-4 green */
+  outline-color: oklch(var(--chart-4) / 0.2) !important;
+  color: oklch(var(--chart-4)) !important;
+}
+
+/* Info toasts */
+[data-sonner-toast][data-type="info"] {
+  background: oklch(var(--background)) !important;
+  border-color: oklch(var(--primary)) !important;
+  outline-color: oklch(var(--primary) / 0.2) !important;
+  color: oklch(var(--primary)) !important;
+}
+
+/* Toast descriptions */
+[data-sonner-toast] [data-description] {
+  color: oklch(var(--muted-foreground)) !important;
+  font-size: 0.875rem !important;
+  margin-top: 0.25rem !important;
+}
+
+/* Close button - small circle with X */
+[data-sonner-toast] button[aria-label="Close toast"] {
+  position: absolute !important;
+  top: 0.5rem !important;
+  right: 0.5rem !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  border-radius: 50% !important;
+  background: oklch(var(--muted)) !important;
+  color: oklch(var(--muted-foreground)) !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  opacity: 0.7 !important;
+  transition: opacity 0.2s !important;
+  font-size: 0.875rem !important;
+  line-height: 1 !important;
+}
+
+[data-sonner-toast] button[aria-label="Close toast"]:hover {
+  opacity: 1 !important;
+}
+
+/* Hide the default X content, we'll use the button's text */
+[data-sonner-toast] button[aria-label="Close toast"] svg {
+  display: none !important;
+}
+
+/* Add single X using text */
+[data-sonner-toast] button[aria-label="Close toast"]::before {
+  content: "×" !important;
+  font-size: 1rem !important;
+  line-height: 1 !important;
+  font-weight: normal !important;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -297,3 +394,32 @@ body {
 .message-content h4 { font-size: 1.125rem; }
 .message-content h5 { font-size: 1rem; }
 .message-content h6 { font-size: 0.875rem; }
+
+/* Sonner toast theme integration */
+[data-sonner-toaster] {
+  font-family: var(--font-sans) !important;
+}
+
+[data-sonner-toast] {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: hsl(var(--destructive)) !important;
+  color: hsl(var(--destructive-foreground)) !important;
+  border-color: hsl(var(--destructive)) !important;
+}
+
+[data-sonner-toast][data-type="success"] {
+  background: hsl(var(--primary) / 0.1) !important;
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary) / 0.3) !important;
+}
+
+.dark [data-sonner-toast] {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}

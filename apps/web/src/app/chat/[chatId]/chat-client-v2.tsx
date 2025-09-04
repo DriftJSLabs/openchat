@@ -7,7 +7,7 @@ import { Loader2, Play, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatInput } from "@/components/chat-input";
 import { MessageContent } from "@/components/message-content";
-import { OpenRouterConnect } from "@/components/auth/openrouter-connect";
+import { toast } from "sonner";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -40,7 +40,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [stoppedStreams, setStoppedStreams] = useState<Map<string, StreamData>>(new Map());
   const [continuingMessageId, setContinuingMessageId] = useState<string | null>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -56,6 +55,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const isAbortingRef = useRef<boolean>(false); // Track user-initiated aborts
   const lastScrollTop = useRef(0);
   const scrollCheckTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastRequestTimeRef = useRef<number>(0); // Track last API request time for rate limiting
   
   // Refs to track accumulated content in real-time (always current, unlike state)
   const accumulatedContentRef = useRef<string>("");
@@ -223,19 +223,42 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [continuingMessageId, streamingContent]);
 
+  const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests
+  
   const continueGeneration = async (messageId: string) => {
     if (isLoading) return;
     
+    // Client-side rate limiting - ensure minimum interval between requests
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTimeRef.current;
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+      toast.warning(`Please wait a moment before continuing`, {
+        description: `Try again in ${Math.ceil(waitTime / 1000)} second(s)`
+      });
+      return;
+    }
+    
     // Get the stream data for this message
-    const streamData = stoppedStreams.get(messageId);
+    const streamData = stoppedStreams.get(messageId) as any;
     console.log('[CONTINUE] Attempting to continue message:', messageId, streamData);
     if (!streamData || !streamData.canResume) {
       console.error('Cannot resume stream for message:', messageId, 'streamData:', streamData);
       return;
     }
     
+    // Check if we're still in a rate limit cooldown period
+    if (streamData.retryAfter && streamData.retryAfter > now) {
+      const waitTime = Math.ceil((streamData.retryAfter - now) / 1000);
+      toast.warning(`Rate limited`, {
+        description: `Please wait ${waitTime} seconds before trying again`
+      });
+      return;
+    }
+    
+    lastRequestTimeRef.current = now;
+    
     setIsLoading(true);
-    setError(null);
     setContinuingMessageId(messageId);
     currentMessageIdRef.current = messageId;
     setStreamingContent(''); // Start fresh - don't duplicate
@@ -251,22 +274,120 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       const currentContent = currentMessage?.content || streamData.partialContent;
       
       // Send continuation request with resume flag and current content
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: streamData.messages,
-          model: streamData.model,
-          token,
-          streamId: streamData.streamId,
-          resume: true,
-          partialContent: currentContent, // Send the current partial content
-        }),
-      });
+      // Retry logic with exponential backoff for rate limits
+      let retryCount = 0;
+      const maxRetries = 3;
+      let response: Response | null = null;
       
-      if (!response.ok) {
-        throw new Error(`Continuation failed: ${response.status}`);
+      while (retryCount <= maxRetries) {
+        try {
+          response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messages,
+              model: selectedModel,
+              token,
+              streamId: streamData.streamId,
+              resume: true,
+              partialContent: currentContent, // Send the current partial content
+            }),
+          });
+          
+          if (response.ok) {
+            break; // Success, exit retry loop
+          }
+          
+          // Handle rate limiting specifically
+          if (response.status === 429) {
+            if (retryCount >= maxRetries) {
+              // Update UI to show rate limit error
+              const retryAfter = response.headers.get('Retry-After');
+              const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000;
+              
+              // Check if it's an upstream rate limit or our rate limit
+              try {
+                const errorData = await response.json();
+                if (errorData.isUpstreamRateLimit) {
+                  toast.warning(errorData.error, {
+                    description: errorData.suggestedAction,
+                    duration: 6000
+                  });
+                } else {
+                  toast.warning(`Rate limited`, {
+                    description: `Please wait ${Math.ceil(waitTime / 1000)} seconds and try again`
+                  });
+                }
+              } catch {
+                toast.warning(`Rate limited`, {
+                  description: `Please wait ${Math.ceil(waitTime / 1000)} seconds and try again`
+                });
+              }
+              
+              setContinuingMessageId(null);
+              setIsLoading(false);
+              
+              // Store the partial content for potential future retry
+              const updatedStreamData = {
+                ...streamData,
+                wasRateLimited: true,
+                retryAfter: Date.now() + waitTime
+              };
+              setStoppedStreams(new Map(stoppedStreams.set(messageId, updatedStreamData)));
+              
+              throw new Error(`Rate limited: Please wait before continuing. Too many requests in a short time.`);
+            }
+            
+            // Calculate backoff delay (1s, 2s, 4s, 8s)
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+            
+            // Check if it's an upstream rate limit - don't retry for those
+            try {
+              const errorData = await response.json();
+              if (errorData.isUpstreamRateLimit) {
+                toast.warning(errorData.error, {
+                  description: errorData.suggestedAction,
+                  duration: 6000
+                });
+                setContinuingMessageId(null);
+                setIsLoading(false);
+                return; // Don't retry for upstream rate limits
+              }
+            } catch {
+              // Continue with retry if we can't parse the error
+            }
+            
+            // Only retry for our rate limits
+            toast.info(`Retrying in ${Math.ceil(delay / 1000)} seconds...`, {
+              description: `Attempt ${retryCount + 1} of ${maxRetries}`
+            });
+            console.log(`Rate limited (429). Retrying in ${delay}ms... (Attempt ${retryCount + 1}/${maxRetries})`);
+            
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, delay));
+            
+            retryCount++;
+            continue;
+          }
+          
+          // For other errors, throw immediately
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Continuation error:', response.status, errorText);
+            throw new Error(`Continuation failed: ${response.status}`);
+          }
+        } catch (error) {
+          if (retryCount >= maxRetries || !(error instanceof Error) || !error.message.includes('429')) {
+            throw error;
+          }
+          retryCount++;
+        }
+      }
+      
+      if (!response || !response.ok) {
+        throw new Error('Failed to continue after maximum retries');
       }
       
       const reader = response.body!.getReader();
@@ -377,7 +498,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       
     } catch (error) {
       console.error('Failed to continue generation:', error);
-      setError('Failed to continue generation. Please try again.');
+      toast.error('Failed to continue generation. Please try again.');
     } finally {
       setIsLoading(false);
       setContinuingMessageId(null);
@@ -392,12 +513,23 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
+    // Client-side rate limiting for new messages
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTimeRef.current;
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+      toast.warning(`Please wait a moment`, {
+        description: `Try again in ${Math.ceil(waitTime / 1000)} second(s)`
+      });
+      return;
+    }
+    lastRequestTimeRef.current = now;
+
     console.log('[SUBMIT] Starting new message submission');
     const userMessage = input.trim();
     setInput("");
     setIsLoading(true);
     setStreamingContent("");
-    setError(null);
     setIsUserScrolling(false); // Reset scroll when sending new message
     setShowScrollButton(false);
     isStreamSavedRef.current = false; // Reset save flag
@@ -435,6 +567,22 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     try {
       const needsToken = !selectedModel.startsWith("openai/") && !selectedModel.startsWith("anthropic/");
       
+      // If OpenRouter is not connected and we need it, show a message
+      if (needsToken && !isConnected) {
+        const connectMessage = "To get AI responses, please connect to OpenRouter using the 'Connect OpenRouter' button.";
+        
+        // Save the message
+        await sendMessage({
+          chatId: chatId as Id<"chats">,
+          content: connectMessage,
+          role: "assistant",
+          model: "system",
+        });
+        
+        setIsLoading(false);
+        return;
+      }
+      
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -450,6 +598,31 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       });
 
       if (!response.ok) {
+        // Handle rate limiting specifically
+        if (response.status === 429) {
+          const errorData = await response.json();
+          
+          // Check if it's an upstream rate limit
+          if (errorData.isUpstreamRateLimit) {
+            toast.warning(errorData.error, {
+              description: errorData.suggestedAction,
+              duration: 6000
+            });
+          } else {
+            const retryAfter = response.headers.get('Retry-After');
+            const waitTime = retryAfter ? parseInt(retryAfter) : 60;
+            toast.warning(`Rate limited`, {
+              description: `Please wait ${waitTime} seconds before trying again`
+            });
+          }
+          
+          setIsLoading(false);
+          
+          // Don't throw for rate limits, just return gracefully
+          console.log('Rate limited on send:', errorData);
+          return;
+        }
+        
         const errorData = await response.json();
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
@@ -557,7 +730,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     } catch (error: any) {
       console.error("Chat error:", error);
       if (error?.name !== 'AbortError') {
-        setError(error.message || "Failed to send message. Please try again.");
+        toast.error(error.message || "Failed to send message. Please try again.");
       }
     } finally {
       console.log('[SUBMIT] Finally block - cleaning up');
@@ -674,14 +847,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           </motion.div>
         )}
         
-        {error && (
-          <div className="flex justify-center">
-            <div className="bg-destructive/10 text-destructive rounded-lg px-4 py-2 max-w-[80%]">
-              {error}
-            </div>
-          </div>
-        )}
-        
         <div ref={messagesEndRef} />
       </div>
 
@@ -700,14 +865,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       )}
 
       {/* Input area - flex-shrink-0 to prevent compression */}
-      <div className="flex-shrink-0 bg-background border-t p-4 space-y-2">
-        {needsOpenRouter && !isConnected && (
-          <div className="mb-2">
-            <OpenRouterConnect />
-          </div>
-        )}
-        
-        <div className="flex gap-2">
+      <div className="flex-shrink-0 bg-background border-t p-4 space-y-2">        
+        <div className="flex gap-2 items-center">
           <ChatInput
             value={input}
             onChange={setInput}

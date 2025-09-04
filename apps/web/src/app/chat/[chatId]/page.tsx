@@ -1,32 +1,56 @@
-import type { Metadata } from "next";
+"use client";
+
+import { useEffect } from "react";
+import { useQuery } from "convex/react";
 import { api } from "server/convex/_generated/api";
-import { fetchQuery } from "convex/nextjs";
+import type { Id } from "server/convex/_generated/dataModel";
+import { useParams } from "next/navigation";
+import { toast } from "sonner";
 import ChatPageClient from "./chat-client-v2";
+import MindMapClient from "./mindmap-client";
 
-export const dynamic = "force-dynamic";
-
-export async function generateMetadata({ params }: { params: Promise<{ chatId: string }> }): Promise<Metadata> {
-  try {
-    const { chatId } = await params;
-    const chat = await fetchQuery(api.chats.getChat, { chatId: chatId as any });
-    
-    if (chat && chat.title) {
-      return {
-        title: `${chat.title} - OpenChat`,
-        description: `Chat conversation: ${chat.title}`,
-      };
+export default function ChatPage() {
+  const params = useParams();
+  const chatId = params.chatId as string;
+  
+  const chat = useQuery(api.chats.getChat, { 
+    chatId: chatId as Id<"chats"> 
+  });
+  
+  // Show error if chat fetch fails
+  useEffect(() => {
+    if (chat === null) {
+      toast.error("Failed to load chat", {
+        description: "Please check your connection and try again"
+      });
     }
-  } catch (error) {
-    console.error("Error generating metadata for chat:", error);
+  }, [chat]);
+  
+  // Loading state
+  if (chat === undefined) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading chat...</div>
+      </div>
+    );
   }
   
-  return {
-    title: "Chat - OpenChat",
-    description: "OpenChat conversation",
-  };
-}
-
-export default async function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
-  const { chatId } = await params;
+  // Error state
+  if (chat === null) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold mb-2">Chat not found</h2>
+          <p className="text-muted-foreground">This chat may have been deleted or you don't have access to it.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Render appropriate view based on chat mode
+  if (chat.viewMode === "mindmap") {
+    return <MindMapClient chatId={chatId} />;
+  }
+  
   return <ChatPageClient chatId={chatId} />;
 }

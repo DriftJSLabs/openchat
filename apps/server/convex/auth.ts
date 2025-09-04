@@ -1,6 +1,7 @@
-import { convexAuth } from "@convex-dev/auth/server";
-import { Password } from "@convex-dev/auth/providers/Password";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 
-export const { auth, signIn, signOut, store } = convexAuth({
-  providers: [Password],
-});
+export async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<string | null> {
+  // For development: return a default user ID
+  // In production, this would validate JWT tokens from ctx.auth
+  return "user_default";
+}
