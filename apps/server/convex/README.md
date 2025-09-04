@@ -3,6 +3,9 @@
 Write your Convex functions here.
 See https://docs.convex.dev/functions for more.
 
+## Authentication
+This project uses Convex Auth with email/password authentication.
+
 A query function that takes two arguments looks like:
 
 ```ts
