@@ -114,11 +114,37 @@ class EnvironmentConfig {
 // Create and validate environment configuration
 let env: EnvironmentConfig;
 
+// During Vercel build, skip validation to prevent build failures
+const isVercelBuild = process.env.VERCEL === '1' && process.env.CI === '1';
+
 try {
-  env = new EnvironmentConfig();
+  if (isVercelBuild) {
+    // During build, create a minimal config that won't fail
+    const buildEnv = {
+      NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
+      NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'build-time-secret',
+      BETTER_AUTH_DATABASE_URL: process.env.BETTER_AUTH_DATABASE_URL || '.data/auth.db',
+      AUTH_DATA_DIR: '.data',
+      OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'build-time-secret',
+      STREAM_DATA_DIR: process.env.STREAM_DATA_DIR || '.data/streams',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      ENABLE_DEV_AUTH: process.env.ENABLE_DEV_AUTH,
+      CONVEX_ENV: process.env.CONVEX_ENV,
+      hasAIProvider: () => false,
+      getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+      logConfigStatus: () => {},
+    };
+    env = buildEnv as unknown as EnvironmentConfig;
+  } else {
+    env = new EnvironmentConfig();
+  }
 } catch (error) {
-  if (process.env.NODE_ENV === 'production') {
-    // Fail fast in production
+  if (process.env.NODE_ENV === 'production' && !isVercelBuild) {
+    // Fail fast in production (but not during build)
     process.exit(1);
   }
   throw error;

@@ -1,11 +1,17 @@
 {
 	"$schema": "https://turbo.build/schema.json",
 	"ui": "tui",
+	"globalEnv": [
+		"CONVEX_SELF_HOSTED_ADMIN_KEY",
+		"NEXT_PUBLIC_CONVEX_URL",
+		"VERCEL",
+		"CI"
+	],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": ["dist/**"]
+			"outputs": ["dist/**", ".next/**"]
 		},
 		"lint": {
 			"dependsOn": ["^lint"]
