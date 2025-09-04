@@ -2,32 +2,26 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../server/convex/_generated/api";
-import { useEffect } from "react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
 
 export function useAuth() {
-  const user = useQuery(api.users.viewer);
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { signOut } = useAuthActions();
+  const user = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
   const ensureUser = useMutation(api.users.ensureUser);
-  
-  useEffect(() => {
-    // Ensure user is created in database when we have a user
-    if (user && !user._id.includes("dev_user")) {
-      ensureUser();
-    }
-  }, [user, ensureUser]);
 
   return {
-    isAuthenticated: !!user,
-    isLoading: user === undefined,
+    isAuthenticated,
+    isLoading,
     user,
     signIn: async () => {
-      // For now, just reload to trigger Convex auth
-      // In production, you'd integrate with Convex Auth providers
-      window.location.reload();
+      // Sign in is handled by the auth forms
+      // This is just for compatibility
+      window.location.href = "/";
     },
     signOut: async () => {
-      // For now, just reload
-      // In production, you'd clear Convex auth session
-      window.location.reload();
+      await signOut();
     },
   };
 }

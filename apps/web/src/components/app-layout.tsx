@@ -9,10 +9,10 @@ import { Menu, X, LogOut, Pencil, Check, AlertTriangle, Info, Sparkles, Unlink, 
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../server/convex/_generated/api";
-
 import { useAuth } from "@/hooks/use-auth";
 import { useOpenRouterAuth } from "@/contexts/openrouter-auth";
 import { toast } from "sonner";
+import { SignInForm, SignUpForm } from "@/components/auth-forms";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [animatedChats, setAnimatedChats] = useState<Set<string>>(new Set());
   const [editingChat, setEditingChat] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [signInMode, setSignInMode] = useState(true);
   
   const createChat = useMutation(api.chats.createChat);
   const deleteChat = useMutation(api.chats.deleteChat);
@@ -65,21 +66,15 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const handleNewChat = async () => {
     if (!isAuthenticated) {
-      toast.error("Please sign in", {
-        description: "You need to be signed in to create a new chat."
-      });
-      // TODO: Show sign-in UI or redirect
+      // Don't show toast, just show the sign-in form
       return;
     }
     
     try {
-      const id = await createChat({ viewMode: "chat" });
-      router.push(`/chat/${id}`);
-      setSidebarOpen(false);
+      const chatId = await createChat({ title: "New Chat" });
+      router.push(`/chat/${chatId}`);
     } catch (error) {
-      toast.error("Failed to create chat", {
-        description: "There was an error creating your chat. Please try again."
-      });
+      // Silent fail or show a simple error
     }
   };
 
@@ -447,17 +442,55 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Link>
           </div>
 
-          {/* New Chat Button */}
-          <div className="p-4">
-            <Button
-              onClick={handleNewChat}
-              className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
-              variant="outline"
-            >
-              <Plus className="h-4 w-4" />
-              New Chat
-            </Button>
-          </div>
+          {/* New Chat Button or Auth Form */}
+          {isAuthenticated ? (
+            <div className="p-4">
+              <Button
+                onClick={handleNewChat}
+                className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
+              </Button>
+            </div>
+          ) : (
+            // Sign In/Up Form when not authenticated
+            <div className="p-4 space-y-4">
+              <div className="text-center mb-4">
+                <h2 className="text-lg font-semibold">Welcome to OpenChat</h2>
+                <p className="text-sm text-muted-foreground mt-1">Sign in to start chatting</p>
+              </div>
+              
+              {signInMode ? (
+                <>
+                  <SignInForm onSuccess={() => setSidebarOpen(false)} />
+                  <div className="text-center text-sm">
+                    <span className="text-muted-foreground">Don't have an account? </span>
+                    <button
+                      onClick={() => setSignInMode(false)}
+                      className="text-primary hover:underline"
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <SignUpForm onSuccess={() => setSidebarOpen(false)} />
+                  <div className="text-center text-sm">
+                    <span className="text-muted-foreground">Already have an account? </span>
+                    <button
+                      onClick={() => setSignInMode(true)}
+                      className="text-primary hover:underline"
+                    >
+                      Sign in
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Chats List */}
           {isAuthenticated && (
@@ -555,17 +588,55 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Link>
           </div>
 
-          {/* New Chat Button */}
-          <div className="p-4">
-            <Button
-              onClick={handleNewChat}
-              className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
-              variant="outline"
-            >
-              <Plus className="h-4 w-4" />
-              New Chat
-            </Button>
-          </div>
+          {/* New Chat Button or Auth Form */}
+          {isAuthenticated ? (
+            <div className="p-4">
+              <Button
+                onClick={handleNewChat}
+                className="w-full justify-center gap-2 transition-all duration-150 hover:scale-105 active:scale-95"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
+              </Button>
+            </div>
+          ) : (
+            // Sign In/Up Form when not authenticated
+            <div className="p-4 space-y-4">
+              <div className="text-center mb-4">
+                <h2 className="text-lg font-semibold">Welcome to OpenChat</h2>
+                <p className="text-sm text-muted-foreground mt-1">Sign in to start chatting</p>
+              </div>
+              
+              {signInMode ? (
+                <>
+                  <SignInForm onSuccess={() => setSidebarOpen(false)} />
+                  <div className="text-center text-sm">
+                    <span className="text-muted-foreground">Don't have an account? </span>
+                    <button
+                      onClick={() => setSignInMode(false)}
+                      className="text-primary hover:underline"
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <SignUpForm onSuccess={() => setSidebarOpen(false)} />
+                  <div className="text-center text-sm">
+                    <span className="text-muted-foreground">Already have an account? </span>
+                    <button
+                      onClick={() => setSignInMode(true)}
+                      className="text-primary hover:underline"
+                    >
+                      Sign in
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Chats List */}
           {isAuthenticated && (
