@@ -26,6 +26,10 @@
 		"dev:setup": {
 			"cache": false,
 			"persistent": true
+		},
+		"test": {
+			"cache": false,
+			"outputs": []
 		}
 	}
 }

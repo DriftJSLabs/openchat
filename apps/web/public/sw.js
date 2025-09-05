@@ -14,6 +14,7 @@ const CACHE_TTL = {
 // Resources to precache on install
 const STATIC_RESOURCES = [
   '/favicon.ico',
+  '/favicon.svg',
   '/icon-192x192.png',
   '/manifest.json',
 ];

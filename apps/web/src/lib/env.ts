@@ -58,28 +58,31 @@ class EnvironmentConfig {
 }
 
 // Create and export environment configuration
-let env: EnvironmentConfig;
+let env: EnvironmentConfig | undefined;
 
 // During build time or on Vercel, use minimal config
 const isBuildTime = process.env.NODE_ENV === 'production' && typeof window === 'undefined';
 const isVercelBuild = process.env.VERCEL === '1';
+const isUnitTest = process.env.NODE_ENV === 'test';
 
 try {
-  if (isBuildTime || isVercelBuild) {
-    // During build, create a minimal config that won't fail
-    env = {
-      NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
-      OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'build-time-secret',
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
-      NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
-      STREAM_DATA_DIR: process.env.STREAM_DATA_DIR || '.data/streams',
-      NODE_ENV: process.env.NODE_ENV || 'development',
-      ENABLE_DEV_AUTH: process.env.ENABLE_DEV_AUTH,
-      CONVEX_ENV: process.env.CONVEX_ENV,
-      getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
-    } as unknown as EnvironmentConfig;
-  } else {
-    env = new EnvironmentConfig();
+  if (!isUnitTest) {
+    if (isBuildTime || isVercelBuild) {
+      // During build, create a minimal config that won't fail
+      env = {
+        NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
+        OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'build-time-secret',
+        NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+        NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+        STREAM_DATA_DIR: process.env.STREAM_DATA_DIR || '.data/streams',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENABLE_DEV_AUTH: process.env.ENABLE_DEV_AUTH,
+        CONVEX_ENV: process.env.CONVEX_ENV,
+        getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+      } as unknown as EnvironmentConfig;
+    } else {
+      env = new EnvironmentConfig();
+    }
   }
 } catch (error) {
   if (process.env.NODE_ENV === 'production' && !isVercelBuild && !isBuildTime) {
@@ -90,3 +93,5 @@ try {
 }
 
 export { env };
+// Export class for tests
+export { EnvironmentConfig };

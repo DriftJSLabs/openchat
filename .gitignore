@@ -4,3 +4,5 @@ node_modules
 .env
 *.bun-build
 .*.bun-build
+apps/server/convex/__tmp__/
+.DS_Store

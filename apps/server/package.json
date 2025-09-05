@@ -2,8 +2,9 @@
 	"name": "server",
 	"version": "1.0.0",
 	"scripts": {
-		"dev": "convex dev",
-		"dev:setup": "convex dev --configure --until-success"
+		"dev": "convex dev --until-success",
+		"dev:setup": "convex dev --configure --until-success",
+		"test": "bun test"
 	},
 	"author": "",
 	"license": "ISC",

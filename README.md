@@ -87,3 +87,23 @@ openchat/
 - `bun dev:setup`: Setup and configure your Convex project
 - `bun check-types`: Check TypeScript types across all apps
 # Authentication Setup Complete
+
+## Tests (Auth + Env)
+
+Run Bun-based tests to validate auth configuration and environment handling locally before you run servers:
+
+- All tests: `bun run test`
+- Server tests: `cd apps/server && bun test`
+- Web tests: `cd apps/web && bun test`
+
+What these cover:
+- Ensures `CONVEX_SITE_URL` aligns with `NEXT_PUBLIC_CONVEX_URL` in development (issuer mismatch guard).
+- Validates `apps/server/convex/auth.config.ts` fails fast without `CONVEX_SITE_URL` and `JWKS`, and loads correctly when present.
+- Enforces `NEXT_PUBLIC_CONVEX_URL` in `apps/web/src/lib/env.ts`.
+- AuthZ: Server-side tests for chats creation and listing ensure unauthenticated calls fail and per-user isolation holds.
+
+Before production, set Convex env vars to match your issuer and keys:
+
+- `CONVEX_SITE_URL` — must equal the JWT `iss` (e.g. `https://dash.ochat.pro`).
+- `JWKS` — public JWKS JSON matching your private signing key.
+- To generate a dev keypair: `node scripts/generateKeys.mjs` (prints `JWT_PRIVATE_KEY` and `JWKS`).
