@@ -57,19 +57,32 @@ class EnvironmentConfig {
   }
 }
 
-// Create and export environment configuration
-let env: EnvironmentConfig | undefined;
-
 // During build time or on Vercel, use minimal config
 const isBuildTime = process.env.NODE_ENV === 'production' && typeof window === 'undefined';
 const isVercelBuild = process.env.VERCEL === '1';
 const isUnitTest = process.env.NODE_ENV === 'test';
 
-try {
-  if (!isUnitTest) {
+// Always export a defined env for TypeScript consumers.
+const env: EnvironmentConfig = (() => {
+  try {
+    if (isUnitTest) {
+      // In tests, construct only when explicitly imported.
+      // Provide a minimal, inert config to satisfy type-checking.
+      return {
+        NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
+        OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'test-secret',
+        NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+        NEXT_PUBLIC_OPENROUTER_APP_URL: process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+        STREAM_DATA_DIR: process.env.STREAM_DATA_DIR || '.data/streams',
+        NODE_ENV: 'test',
+        ENABLE_DEV_AUTH: process.env.ENABLE_DEV_AUTH,
+        CONVEX_ENV: process.env.CONVEX_ENV,
+        getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
+      } as unknown as EnvironmentConfig;
+    }
     if (isBuildTime || isVercelBuild) {
       // During build, create a minimal config that won't fail
-      env = {
+      return {
         NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
         OPENROUTER_ENCRYPTION_SECRET: process.env.OPENROUTER_ENCRYPTION_SECRET || 'build-time-secret',
         NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
@@ -80,17 +93,16 @@ try {
         CONVEX_ENV: process.env.CONVEX_ENV,
         getBaseURL: () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_OPENROUTER_APP_URL || 'http://localhost:3001',
       } as unknown as EnvironmentConfig;
-    } else {
-      env = new EnvironmentConfig();
     }
+    return new EnvironmentConfig();
+  } catch (error) {
+    if (process.env.NODE_ENV === 'production' && !isVercelBuild && !isBuildTime) {
+      // Fail fast in production (but not during build)
+      process.exit(1);
+    }
+    throw error;
   }
-} catch (error) {
-  if (process.env.NODE_ENV === 'production' && !isVercelBuild && !isBuildTime) {
-    // Fail fast in production (but not during build)
-    process.exit(1);
-  }
-  throw error;
-}
+})();
 
 export { env };
 // Export class for tests
