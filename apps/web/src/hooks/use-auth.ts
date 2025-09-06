@@ -9,7 +9,7 @@ export function useAuth() {
   const session = useConvexAuth();
   const { signOut } = useAuthActions();
   // Always ask the server who we are; it returns null when unauthenticated.
-  const user = useQuery(api.users.viewer);
+  const user = useQuery(api.users.viewer, {});
   const ensureUser = useMutation(api.users.ensureUser);
 
   // Derive a robust auth state. If the server says we have a user, trust it.
