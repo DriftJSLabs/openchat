@@ -6,10 +6,15 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 
 export function useAuth() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const session = useConvexAuth();
   const { signOut } = useAuthActions();
-  const user = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
+  // Always ask the server who we are; it returns null when unauthenticated.
+  const user = useQuery(api.users.viewer);
   const ensureUser = useMutation(api.users.ensureUser);
+
+  // Derive a robust auth state. If the server says we have a user, trust it.
+  const isAuthenticated = session.isAuthenticated || (!!user && (user as any)._id);
+  const isLoading = session.isLoading || user === undefined;
 
   return {
     isAuthenticated,
@@ -17,7 +22,6 @@ export function useAuth() {
     user,
     signIn: async () => {
       // Sign in is handled by the auth forms
-      // This is just for compatibility
       window.location.href = "/";
     },
     signOut: async () => {
