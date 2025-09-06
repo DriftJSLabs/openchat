@@ -1,5 +1,5 @@
 // Cache versioning - increment this to force cache update
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `openchat-${CACHE_VERSION}`;
 
 // Cache TTL in milliseconds
@@ -22,6 +22,10 @@ const STATIC_RESOURCES = [
 // Helper function to determine resource type
 function getResourceType(url) {
   const pathname = new URL(url).pathname;
+  // Always treat Next.js build assets as network-first to avoid stale UI.
+  if (pathname.startsWith('/_next/')) {
+    return 'next';
+  }
   
   // API routes - never cache
   if (pathname.startsWith('/api/') || pathname.includes('convex')) {
@@ -186,6 +190,10 @@ self.addEventListener('fetch', (event) => {
     case 'api':
     case 'html':
       // Network-first for dynamic content
+      event.respondWith(networkFirst(request, CACHE_NAME));
+      break;
+    case 'next':
+      // Always fetch fresh Next.js build assets to prevent stale bundles
       event.respondWith(networkFirst(request, CACHE_NAME));
       break;
       
