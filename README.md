@@ -102,6 +102,16 @@ What these cover:
 - Enforces `NEXT_PUBLIC_CONVEX_URL` in `apps/web/src/lib/env.ts`.
 - AuthZ: Server-side tests for chats creation and listing ensure unauthenticated calls fail and per-user isolation holds.
 
+## E2E Tests (Playwright)
+
+- Install browsers once: `bunx playwright install --with-deps`
+- Run against local dev (make sure `bun run dev:server` and `bun run dev:web` are running):
+  - `cd apps/web && bun run e2e` (uses `E2E_BASE_URL=http://localhost:3001` by default)
+- To point at another host: `E2E_BASE_URL=https://ochat.pro bun run e2e`
+
+What they do:
+- Sign up with a unique email, assert the UI shows “New Chat”, create a chat, then sign out and assert the unauthenticated CTA shows.
+
 Before production, set Convex env vars to match your issuer and keys:
 
 - `CONVEX_SITE_URL` — must equal the JWT `iss` (e.g. `https://dash.ochat.pro`).

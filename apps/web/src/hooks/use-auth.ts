@@ -32,6 +32,22 @@ export function useAuth() {
   const isAuthenticated = !!(session.isAuthenticated || (user as any)?._id || hasLocalToken);
   const isLoading = !!(session.isLoading || user === undefined);
 
+  // Optional debug logs if NEXT_PUBLIC_DEBUG_AUTH=1
+  React.useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DEBUG_AUTH === '1') {
+      // eslint-disable-next-line no-console
+      console.log('[auth/debug]', {
+        session: {
+          isAuthenticated: session.isAuthenticated,
+          isLoading: session.isLoading,
+        },
+        user,
+        hasLocalToken,
+        derived: { isAuthenticated, isLoading },
+      });
+    }
+  }, [session.isAuthenticated, session.isLoading, !!(user && (user as any)._id), hasLocalToken]);
+
   return {
     isAuthenticated,
     isLoading,
