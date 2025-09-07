@@ -6,3 +6,6 @@ node_modules
 .*.bun-build
 apps/server/convex/__tmp__/
 .DS_Store
+.convex-dev.*
+.gen_keys.json
+apps/web/test-results/
