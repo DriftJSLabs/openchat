@@ -4,10 +4,8 @@ import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
 	...authTables,
-	users: defineTable({
-		name: v.optional(v.string()),
-		email: v.optional(v.string()),
-	}).index("email", ["email"]),
+	// Do not override authTables.users. If you need app-specific user fields,
+	// create a separate table (e.g. profiles) keyed by the auth user ID.
 	
 	chats: defineTable({
 		userId: v.string(),

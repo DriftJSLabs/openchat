@@ -97,8 +97,7 @@ Run Bun-based tests to validate auth configuration and environment handling loca
 - Web tests: `cd apps/web && bun test`
 
 What these cover:
-- Ensures `CONVEX_SITE_URL` aligns with `NEXT_PUBLIC_CONVEX_URL` in development (issuer mismatch guard).
-- Validates `apps/server/convex/auth.config.ts` fails fast without `CONVEX_SITE_URL` and `JWKS`, and loads correctly when present.
+- Validates `apps/server/convex/auth.config.ts` fails fast without issuer and `JWKS`, and loads correctly when present.
 - Enforces `NEXT_PUBLIC_CONVEX_URL` in `apps/web/src/lib/env.ts`.
 - AuthZ: Server-side tests for chats creation and listing ensure unauthenticated calls fail and per-user isolation holds.
 

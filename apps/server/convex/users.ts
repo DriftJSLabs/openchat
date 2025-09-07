@@ -23,6 +23,7 @@ export const viewer = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
+    console.log('[users.viewer] identity', identity ? { subject: identity.subject, email: identity.email } : null);
     if (!identity) {
       return null;
     }

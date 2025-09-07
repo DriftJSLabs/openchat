@@ -3,25 +3,6 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { ConvexError } from "convex/values";
 
-// Ensure issuer is consistent with the Convex URL (exported for tests)
-export function ensureIssuerEnv() {
-  if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-    if (!process.env.CONVEX_SITE_URL) {
-      process.env.CONVEX_SITE_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
-    } else if (
-      process.env.NODE_ENV !== "production" &&
-      process.env.CONVEX_SITE_URL !== process.env.NEXT_PUBLIC_CONVEX_URL
-    ) {
-      // In non-production, prefer the client URL to avoid issuer mismatches
-      process.env.CONVEX_SITE_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
-    }
-  }
-}
-
-// Ensure issuer is consistent with the Convex URL
-// This helps avoid mismatched `iss` causing auth to fail silently
-ensureIssuerEnv();
-
 export const { auth, signIn, signOut, store } = convexAuth({
   providers: [
     Password({
@@ -30,30 +11,29 @@ export const { auth, signIn, signOut, store } = convexAuth({
         const email = params.email as string;
         return {
           email: email,
-          name: email.split('@')[0],
+          name: email.split("@")[0],
         };
       },
     }),
   ],
+  // Verbose logging hooks to help diagnose sign-in issues locally.
+  callbacks: {
+    async afterUserCreatedOrUpdated(ctx, args) {
+      console.log("[auth] afterUserCreatedOrUpdated", {
+        type: args.type,
+        provider: (args.provider as any)?.id,
+        userId: args.userId,
+        email: (args.profile as any)?.email,
+      });
+    },
+  },
 });
 
 export async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<string | null> {
   // Use Convex Auth to get the current user
   const identity = await ctx.auth.getUserIdentity();
-  
-  if (!identity) {
-    // Development fallback - only enable in development with explicit flag
-    // This ensures it won't accidentally activate in production
-    if (
-      process.env.NODE_ENV === "development" &&
-      process.env.CONVEX_ENV !== "production" &&
-      process.env.ENABLE_DEV_AUTH === "true"
-    ) {
-      return "dev_user";
-    }
-    return null;
-  }
-  
+
+  if (!identity) return null;
   return identity.subject;
 }
 

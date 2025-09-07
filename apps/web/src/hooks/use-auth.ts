@@ -5,6 +5,7 @@ import * as React from "react";
 import { api } from "../../../server/convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
+import { env } from "@/lib/env";
 
 export function useAuth() {
   const session = useConvexAuth();
@@ -20,14 +21,15 @@ export function useAuth() {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const addr = (window as any)?.location?.origin ? undefined : undefined; // noop to keep bundlers happy
-      const ns = (session as any)?.client?.address ?? undefined;
+      // Convex Auth stores tokens under `__convexAuthJWT_${escapedNamespace}`
+      // where namespace defaults to the Convex URL. Mirror that here.
+      const ns = env.NEXT_PUBLIC_CONVEX_URL;
       const sanitized = (ns || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       const key = `__convexAuthJWT_${sanitized}`;
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+      const token = localStorage.getItem(key);
       setHasLocalToken(!!token);
     } catch {}
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, env.NEXT_PUBLIC_CONVEX_URL]);
 
   const isAuthenticated = !!(session.isAuthenticated || (user as any)?._id || hasLocalToken);
   const isLoading = !!(session.isLoading || user === undefined);

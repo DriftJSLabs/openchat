@@ -38,12 +38,11 @@ describe("auth helpers", () => {
   });
 
   it("getCurrentUserId returns dev_user only when explicitly enabled for development", async () => {
+    // Dev fallback removed; unauthenticated returns null
     process.env.NODE_ENV = "development";
-    process.env.CONVEX_ENV = "local";
-    process.env.ENABLE_DEV_AUTH = "true";
     const ctx = makeCtx(null);
     const result = await getCurrentUserId(ctx);
-    expect(result).toBe("dev_user");
+    expect(result).toBe(null);
   });
 
   it("requireAuth throws ConvexError if unauthenticated", async () => {
@@ -51,4 +50,3 @@ describe("auth helpers", () => {
     await expect(requireAuth(ctx)).rejects.toBeInstanceOf(ConvexError);
   });
 });
-

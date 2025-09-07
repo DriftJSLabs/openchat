@@ -5,7 +5,7 @@
 		"apps/*",
 		"packages/*"
 	],
-	"scripts": {
+  "scripts": {
 		"check": "oxlint",
 		"dev": "turbo dev",
 		"build": "turbo build",
@@ -14,8 +14,10 @@
 		"dev:native": "turbo -F native dev",
 		"dev:web": "turbo -F web dev",
 		"dev:server": "turbo -F server dev",
-		"dev:setup": "turbo -F server dev:setup"
-	},
+    "dev:setup": "turbo -F server dev:setup",
+    "e2e:auth": "node scripts/e2e-auth-smoke.mjs",
+    "doctor": "node scripts/run-local-auth-e2e.mjs"
+  },
 	"dependencies": {
 		"@auth/core": "0.37.0",
 		"@convex-dev/better-auth": "^0.7.17",

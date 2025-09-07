@@ -32,7 +32,11 @@ export default function SignUpPage() {
     setIsLoading(true);
 
     try {
-      await signIn("password", { email, password, flow: "signUp" });
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Sign up timed out')), 15000));
+      await Promise.race([
+        signIn("password", { email, password, flow: "signUp" }),
+        timeout,
+      ]);
       // Force a full page reload to refresh auth state
       window.location.href = "/";
       toast.success("Account created!", {

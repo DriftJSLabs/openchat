@@ -7,10 +7,17 @@ export default defineConfig({
   timeout: 60_000,
   retries: process.env.CI ? 2 : 0,
   reporter: [['list']],
+  fullyParallel: false,
+  workers: 1,
   use: {
     baseURL,
     headless: true,
     trace: 'on-first-retry',
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium' },
+    },
+  ],
 });
-

@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-async function importFreshAuthConfig() {
-  const srcPath = join(__dirname, "../convex/auth.config.ts");
+async function importFreshAuthConfig(opts?: { prod?: boolean }) {
+  const srcPath = join(
+    __dirname,
+    opts?.prod ? "../convex/auth.config.prod.ts" : "../convex/auth.config.ts",
+  );
   const dstDir = join(__dirname, "../convex/__tmp__");
   mkdirSync(dstDir, { recursive: true });
   const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -28,14 +31,26 @@ describe("convex auth.config", () => {
     delete process.env.JWKS;
   });
 
-  it("throws helpful error when neither AUTH_ISSUER nor CONVEX_SITE_URL is set", async () => {
+  it("errors when neither AUTH_ISSUER nor CONVEX_SITE_URL is set", async () => {
+    delete process.env.AUTH_ISSUER;
+    delete process.env.CONVEX_SITE_URL;
     process.env.JWKS = JSON.stringify({ keys: [] });
     await expect(importFreshAuthConfig()).rejects.toBeTruthy();
   });
 
-  it("throws helpful error when JWKS missing", async () => {
+  it("errors when JWKS missing", async () => {
     process.env.AUTH_ISSUER = "https://example.test";
+    delete process.env.JWKS;
     await expect(importFreshAuthConfig()).rejects.toBeTruthy();
+  });
+
+  it("loads when envs are set in development", async () => {
+    delete process.env.CONVEX_ENV;
+    process.env.AUTH_ISSUER = "https://example.dev";
+    process.env.JWKS = JSON.stringify({ keys: [{ kty: "RSA", n: "x", e: "AQAB" }] });
+    const mod: any = await importFreshAuthConfig();
+    expect(mod.default?.providers?.length).toBe(1);
+    expect(mod.default.providers[0].type).toBe("customJwt");
   });
 
   it("exports provider when envs set using AUTH_ISSUER", async () => {

@@ -1,20 +1,36 @@
 #!/usr/bin/env node
 
 console.log(`
-To fix the Convex deployment, you need to set the AUTH_SECRET_1 environment variable in Convex.
+Convex Auth: Required backend environment variables (local + prod)
 
-Option 1 - Via Convex Dashboard:
-1. Go to https://dashboard.convex.dev
-2. Select your project
-3. Go to Settings → Environment Variables
-4. Add AUTH_SECRET_1 with a secure value
+We use @convex-dev/auth with JWTs. Configure these envs in your Convex deployment:
 
-Option 2 - Via CLI (requires local dev server):
-1. Start local Convex: cd apps/server && npx convex dev
-2. In another terminal: cd apps/server && npx convex env set AUTH_SECRET_1 "your-secret-value" --prod
+1) CONVEX_SITE_URL
+   - Local dev: http://127.0.0.1:3210
+   - Convex Cloud sets this automatically in production (verify correctness)
 
-Generate a secure secret with: openssl rand -base64 32
+2) JWT_PRIVATE_KEY
+   - Generate with:  cd apps/server && npx auth generate-keys
+   - Paste the single-line PKCS8 value
 
-Note: Convex Auth may append a suffix to the AUTH_SECRET variable name internally.
-If AUTH_SECRET_1 doesn't work, you may need to check the exact variable name in the deployment logs.
+3) JWKS
+   - From the same generator output (JSON string)
+
+Set them via CLI (after starting local dev in another terminal):
+
+  cd apps/server
+  npx convex dev   # keep this running
+
+  # In another terminal:
+  npx convex env set CONVEX_SITE_URL http://127.0.0.1:3210
+  npx convex env set JWT_PRIVATE_KEY "<paste private key>"
+  npx convex env set JWKS '<paste jwks json>'
+
+Verify JWKS is served:
+  curl -sS http://127.0.0.1:3210/.well-known/jwks.json | jq .
+
+Reset local data if needed via dashboard:
+  http://127.0.0.1:6790
+
+More detailed steps: apps/server/SETUP_AUTH.md
 `);

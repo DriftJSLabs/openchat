@@ -2,7 +2,7 @@
 	"name": "web",
 	"version": "0.1.0",
 	"private": true,
-	"scripts": {
+  "scripts": {
 		"dev": "next dev --port=3001",
 		"build": "next build",
 		"start": "next start",
@@ -10,9 +10,11 @@
 		"typecheck": "tsc --noEmit",
 		"env:generate": "node ../../scripts/generate-secrets.js",
 		"env:test": "npx tsx src/lib/env.test.ts",
-    "test": "bun test",
-    "e2e": "playwright test --config ./e2e/playwright.config.ts"
-	},
+    "test": "bun test tests/**/*.test.ts",
+    "e2e": "playwright test --config ./e2e/playwright.config.ts --project=chromium",
+    "e2e:headed": "playwright test --config ./e2e/playwright.config.ts --project=chromium --headed",
+    "e2e:webkit": "playwright test --config ./e2e/playwright.config.ts --project=webkit"
+  },
 	"dependencies": {
 		"@ai-sdk/anthropic": "^2.0.9",
 		"@ai-sdk/openai": "^2.0.23",
